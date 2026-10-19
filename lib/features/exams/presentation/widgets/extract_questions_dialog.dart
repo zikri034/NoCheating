@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/theme/neo_theme.dart';
 import '../../../../core/widgets/neo_button.dart';
+import '../../../../core/widgets/neo_snackbar.dart';
 import '../../../../core/widgets/neo_tag.dart';
 import '../providers/exam_provider.dart';
 
@@ -66,6 +67,11 @@ class _ExtractQuestionsDialogState extends State<ExtractQuestionsDialog> {
       setState(() {
         _errorMessage = 'Silakan pilih berkas dokumen terlebih dahulu';
       });
+      NeoSnackbar.showError(
+        context,
+        title: 'BERKAS BELUM DIPILIH',
+        message: 'Pilih file PDF, Word (.docx), atau TXT naskah soal.',
+      );
       return;
     }
 
@@ -93,10 +99,26 @@ class _ExtractQuestionsDialogState extends State<ExtractQuestionsDialog> {
           _selectedIndices.add(i);
         }
       });
+
+      if (mounted) {
+        NeoSnackbar.showSuccess(
+          context,
+          title: 'EKSTRAKSI BERHASIL',
+          message: 'Gemini AI berhasil mengekstrak ${questionsList.length} butir soal dari dokumen.',
+        );
+      }
     } catch (e) {
+      final err = e.toString().replaceAll('Exception: ', '');
       setState(() {
-        _errorMessage = e.toString().replaceAll('Exception: ', '');
+        _errorMessage = err;
       });
+      if (mounted) {
+        NeoSnackbar.showError(
+          context,
+          title: 'EKSTRAKSI GAGAL',
+          message: err,
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -134,6 +156,11 @@ class _ExtractQuestionsDialogState extends State<ExtractQuestionsDialog> {
       setState(() {
         _errorMessage = 'Silakan pilih mata kuliah tujuan';
       });
+      NeoSnackbar.showError(
+        context,
+        title: 'MATA KULIAH KOSONG',
+        message: 'Silakan pilih mata kuliah tujuan sebelum menyimpan.',
+      );
       return;
     }
 
@@ -141,6 +168,11 @@ class _ExtractQuestionsDialogState extends State<ExtractQuestionsDialog> {
       setState(() {
         _errorMessage = 'Pilih minimal satu butir soal untuk disimpan';
       });
+      NeoSnackbar.showError(
+        context,
+        title: 'BELUM ADA SOAL DIPILIH',
+        message: 'Pilih minimal satu butir soal untuk disimpan ke bank.',
+      );
       return;
     }
 
@@ -151,15 +183,26 @@ class _ExtractQuestionsDialogState extends State<ExtractQuestionsDialog> {
 
     try {
       final examProv = context.read<ExamProvider>();
+      final messenger = ScaffoldMessenger.of(context);
+
       final questionsToSave = _selectedIndices.map((i) {
         final q = _extractedQuestions[i];
+        final type = (q['type'] as String?)?.toLowerCase() == 'essay' ? 'essay' : 'mcq';
+        List<String>? options;
+        if (type == 'mcq' && q['options'] is List) {
+          options = (q['options'] as List)
+              .map((e) => e.toString().trim())
+              .where((e) => e.isNotEmpty)
+              .toList();
+        }
+
         return {
-          'type': q['type'],
-          'body': q['body'],
-          'options': q['options'],
-          'correct_option': q['correct_option'],
-          'rubric': q['rubric'],
-          'model_answer': q['model_answer'],
+          'type': type,
+          'body': (q['body'] as String?)?.trim() ?? '',
+          'options': options,
+          'correct_option': q['correct_option']?.toString().trim(),
+          'rubric': q['rubric']?.toString().trim(),
+          'model_answer': q['model_answer']?.toString().trim(),
           'max_score': (q['max_score'] as num?)?.toDouble() ?? 10.0,
         };
       }).toList();
@@ -171,24 +214,86 @@ class _ExtractQuestionsDialogState extends State<ExtractQuestionsDialog> {
 
       if (mounted) {
         Navigator.of(context).pop(created);
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(
           SnackBar(
-            backgroundColor: NeoColors.success,
-            content: Text(
-              'Berhasil menyimpan ${created.length} butir soal ke bank soal!',
-              style: const TextStyle(
-                fontFamily: 'Space Grotesk',
-                fontWeight: FontWeight.w700,
-                color: NeoColors.ink,
+            elevation: 0,
+            backgroundColor: Colors.transparent,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+            margin: const EdgeInsets.only(bottom: 24, left: 16, right: 16),
+            padding: EdgeInsets.zero,
+            content: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: NeoColors.success,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: NeoColors.ink, width: 3),
+                boxShadow: const [
+                  BoxShadow(
+                    color: NeoColors.ink,
+                    offset: Offset(4, 4),
+                    blurRadius: 0,
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: NeoColors.ink, width: 2),
+                    ),
+                    child: const Icon(Icons.check_circle_rounded, color: NeoColors.ink, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'BERHASIL SIMPAN KE BANK SOAL',
+                          style: TextStyle(
+                            fontFamily: 'Space Grotesk',
+                            fontWeight: FontWeight.w800,
+                            fontSize: 14,
+                            color: NeoColors.ink,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${created.length} butir soal telah berhasil disimpan ke bank soal!',
+                          style: const TextStyle(
+                            fontFamily: 'Hanken Grotesk',
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                            color: NeoColors.ink,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
         );
       }
     } catch (e) {
-      setState(() {
-        _errorMessage = e.toString().replaceAll('Exception: ', '');
-      });
+      final err = e.toString().replaceAll('Exception: ', '');
+      if (mounted) {
+        setState(() {
+          _errorMessage = err;
+        });
+        NeoSnackbar.showError(
+          context,
+          title: 'GAGAL MENYIMPAN SOAL',
+          message: err,
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {

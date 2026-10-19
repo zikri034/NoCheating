@@ -4,6 +4,7 @@ import '../../../../core/theme/neo_theme.dart';
 import '../../../../core/widgets/neo_text_field.dart';
 import '../../../../core/widgets/neo_chip.dart';
 import '../../../../core/widgets/neo_empty_state.dart';
+import '../../../../core/widgets/neo_snackbar.dart';
 import '../../../../core/services/geofence_service.dart';
 import '../../../../core/services/biometric_service.dart';
 import '../../../../core/widgets/neo_tag.dart';
@@ -211,18 +212,16 @@ class _ExamsScreenState extends State<ExamsScreen> {
             if (success) {
               await examProv.loadExams();
               if (!mounted) return success;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  backgroundColor: NeoColors.success,
-                  content: Text('Ujian baru berhasil dibuat!', style: TextStyle(color: NeoColors.ink)),
-                ),
+              NeoSnackbar.showSuccess(
+                context,
+                title: 'UJIAN BERHASIL DIBUAT',
+                message: 'Ujian baru berhasil dibuat dan siap dijadwalkan!',
               );
             } else {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  backgroundColor: NeoColors.danger,
-                  content: Text(examProv.errorMessage ?? 'Gagal membuat ujian', style: const TextStyle(color: Colors.white)),
-                ),
+              NeoSnackbar.showError(
+                context,
+                title: 'GAGAL MEMBUAT UJIAN',
+                message: examProv.errorMessage ?? 'Gagal membuat ujian',
               );
             }
           }
@@ -251,13 +250,20 @@ class _ExamsScreenState extends State<ExamsScreen> {
         courses: examProv.courses,
         onSubmit: (data) async {
           final success = await examProv.createQuestion(data);
-          if (mounted && success) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                backgroundColor: NeoColors.success,
-                content: Text('Soal baru berhasil ditambahkan ke bank soal!', style: TextStyle(color: NeoColors.ink)),
-              ),
-            );
+          if (mounted) {
+            if (success) {
+              NeoSnackbar.showSuccess(
+                context,
+                title: 'BERHASIL MENAMBAHKAN SOAL',
+                message: 'Soal baru berhasil ditambahkan ke bank soal!',
+              );
+            } else {
+              NeoSnackbar.showError(
+                context,
+                title: 'GAGAL MENAMBAHKAN SOAL',
+                message: examProv.errorMessage ?? 'Gagal menambahkan soal ke bank soal',
+              );
+            }
           }
           return success;
         },

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/neo_theme.dart';
 import '../../../../core/widgets/neo_button.dart';
+import '../../../../core/widgets/neo_snackbar.dart';
 import '../../../../core/widgets/neo_text_field.dart';
 import '../../data/models/course_model.dart';
 
@@ -64,8 +65,10 @@ class _CreateQuestionDialogState extends State<CreateQuestionDialog> {
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedCourseId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Pilih mata kuliah terlebih dahulu')),
+      NeoSnackbar.showError(
+        context,
+        title: 'MATA KULIAH KOSONG',
+        message: 'Pilih mata kuliah terlebih dahulu sebelum menyimpan.',
       );
       return;
     }
@@ -86,8 +89,10 @@ class _CreateQuestionDialogState extends State<CreateQuestionDialog> {
           .toList();
 
       if (options.length < 2) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Isi minimal 2 opsi jawaban untuk pilihan ganda')),
+        NeoSnackbar.showError(
+          context,
+          title: 'OPSI TIDAK CUKUP',
+          message: 'Isi minimal 2 opsi jawaban untuk soal pilihan ganda.',
         );
         return;
       }

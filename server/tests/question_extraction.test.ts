@@ -144,4 +144,41 @@ describe('Question Document Extraction and Batch Create Tests', () => {
     expect(res.body.questions).toHaveLength(2);
     expect(res.body.questions[0].course_id).toBe(courseId);
   });
+
+  it('POST /api/questions/batch should succeed when options and rubric contain null from extraction', async () => {
+    const questionsFromClient = [
+      {
+        type: 'mcq' as const,
+        body: 'Soal MCQ dengan rubric null',
+        options: ['Opsi A', 'Opsi B', 'Opsi C'],
+        correct_option: 'Opsi B',
+        rubric: null,
+        model_answer: null,
+        max_score: 10,
+      },
+      {
+        type: 'essay' as const,
+        body: 'Soal Essay dengan options null',
+        options: null,
+        correct_option: null,
+        rubric: 'Rubrik penilaian ringkas',
+        model_answer: 'Jawaban acuan lengkap',
+        max_score: 15,
+      },
+    ];
+
+    const res = await request(app)
+      .post('/api/questions/batch')
+      .set('Authorization', `Bearer ${lecturerToken}`)
+      .send({
+        course_id: courseId,
+        questions: questionsFromClient,
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(res.body.count).toBe(2);
+    expect(res.body.questions[1].type).toBe('essay');
+    expect(res.body.questions[1].options).toBeNull();
+  });
 });

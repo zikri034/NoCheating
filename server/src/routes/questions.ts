@@ -16,19 +16,19 @@ const upload = multer({
 const createQuestionSchema = z.object({
   course_id: z.string().uuid(),
   type: z.enum(['mcq', 'essay']),
-  body: z.string().min(3).max(5000),
-  options: z.array(z.string()).min(2).optional(),
-  correct_option: z.string().optional(),
-  rubric: z.string().optional(),
-  model_answer: z.string().optional(),
-  max_score: z.number().positive().default(10),
+  body: z.string().min(1).max(5000),
+  options: z.array(z.string()).optional().nullable(),
+  correct_option: z.string().optional().nullable(),
+  rubric: z.string().optional().nullable(),
+  model_answer: z.string().optional().nullable(),
+  max_score: z.union([z.number(), z.string()]).transform((v) => Number(v) || 10).optional().nullable(),
 }).refine((data) => {
   if (data.type === 'mcq') {
-    return !!data.options && data.options.length >= 2 && !!data.correct_option;
+    return Array.isArray(data.options) && data.options.length >= 2;
   }
   return true;
 }, {
-  message: 'Soal pilihan ganda harus memiliki opsi dan kunci jawaban yang valid',
+  message: 'Soal pilihan ganda harus memiliki minimal 2 opsi pilihan',
 });
 
 // GET /api/questions — Bank soal dengan pencarian, filter, dan pagination (dosen)
@@ -124,11 +124,18 @@ router.post('/', jwtMiddleware, requireRole('lecturer'), async (req: Request, re
 const batchQuestionItemSchema = z.object({
   type: z.enum(['mcq', 'essay']),
   body: z.string().min(1).max(5000),
-  options: z.array(z.string()).min(2).optional(),
-  correct_option: z.string().optional(),
-  rubric: z.string().optional(),
-  model_answer: z.string().optional(),
-  max_score: z.number().positive().default(10),
+  options: z.array(z.string()).optional().nullable(),
+  correct_option: z.string().optional().nullable(),
+  rubric: z.string().optional().nullable(),
+  model_answer: z.string().optional().nullable(),
+  max_score: z.union([z.number(), z.string()]).transform((v) => Number(v) || 10).optional().nullable(),
+}).refine((data) => {
+  if (data.type === 'mcq') {
+    return Array.isArray(data.options) && data.options.length >= 2;
+  }
+  return true;
+}, {
+  message: 'Soal pilihan ganda harus memiliki minimal 2 opsi pilihan',
 });
 
 const batchCreateQuestionsSchema = z.object({
@@ -220,16 +227,22 @@ router.post(
       }
 
       const inserted = await db.transaction(async (trx) => {
-        const rowsToInsert = data.questions.map((q) => ({
-          course_id: data.course_id,
-          type: q.type,
-          body: q.body,
-          options: q.options ? JSON.stringify(q.options) : null,
-          correct_option: q.correct_option || null,
-          rubric: q.rubric || null,
-          model_answer: q.model_answer || null,
-          max_score: q.max_score,
-        }));
+        const rowsToInsert = data.questions.map((q) => {
+          let opts: string[] | null = null;
+          if (q.type === 'mcq' && Array.isArray(q.options) && q.options.length > 0) {
+            opts = q.options;
+          }
+          return {
+            course_id: data.course_id,
+            type: q.type,
+            body: q.body,
+            options: opts ? JSON.stringify(opts) : null,
+            correct_option: q.correct_option || (opts ? opts[0] : null),
+            rubric: q.rubric || null,
+            model_answer: q.model_answer || null,
+            max_score: q.max_score || 10,
+          };
+        });
 
         return await trx('questions').insert(rowsToInsert).returning('*');
       });
