@@ -1,0 +1,41 @@
+stateDiagram-v2
+    [*] --> PilihUjian: Mahasiswa memilih ujian dari daftar
+    PilihUjian --> CekGeofence: Klik Mulai Ujian
+
+    state CekGeofence <<choice>>
+    CekGeofence --> DiluarRadius: Jarak GPS > Radius Ujian
+    DiluarRadius --> TampilkanPeringatan: Blokir pengerjaan ujian
+    TampilkanPeringatan --> [*]
+
+    CekGeofence --> DidalamRadius: Jarak GPS <= Radius Ujian
+    DidalamRadius --> RequestAttempt: POST /api/exams/:id/attempts
+
+    RequestAttempt --> InitExamRunner: Terima Soal Teracak & Server Deadline
+    InitExamRunner --> MengerjakanUjian: Mulai Timer & Aktifkan Sensor/Lifecycle Monitor
+
+    state MengerjakanUjian {
+        [*] --> InputJawaban: Mahasiswa memilih opsi / mengetik essay
+        InputJawaban --> SimpanLokal: Enkripsi AES-GCM ke SQLite
+        SimpanLokal --> SinkronServer: Debounce PUT /api/attempts/:id/answers
+        SinkronServer --> InputJawaban
+
+        --
+        [*] --> PantauSensor: Sensor Gerak & Siklus App Aktif
+        PantauSensor --> DeteksiCurang: Pindah App / Goyangan Ekstrem
+        DeteksiCurang --> CatatPelanggaran: POST /api/attempts/:id/violations
+        CatatPelanggaran --> EvaluasiThreshold: Hitung critical_count
+        EvaluasiThreshold --> SanksiDiskualifikasi: critical_count >= 3
+        EvaluasiThreshold --> PantauSensor: critical_count < 3
+    }
+
+    MengerjakanUjian --> KonfirmasiKumpul: Mahasiswa klik Submit
+    MengerjakanUjian --> AutoSubmit: Server Deadline Habis (0s)
+    SanksiDiskualifikasi --> AutoSubmit: Diskualifikasi Otomatis
+
+    KonfirmasiKumpul --> KirimSubmit: POST /api/attempts/:id/submit
+    AutoSubmit --> KirimSubmit
+
+    KirimSubmit --> CatatBlockchain: Server tambahkan blok SUBMISSION (PoW)
+    CatatBlockchain --> PemicuKoreksi: Hitung skor MCQ & Antrekan Koreksi Essay
+    PemicuKoreksi --> TampilkanReceipt: Tampilkan Hasil & QR Hash Receipt
+    TampilkanReceipt --> [*]

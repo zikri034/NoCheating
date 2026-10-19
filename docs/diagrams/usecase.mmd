@@ -1,0 +1,56 @@
+flowchart LR
+    subgraph Aktor
+        Mahasiswa["Mahasiswa"]
+        Dosen["Dosen"]
+        Sistem["Sistem SafeExam"]
+    end
+
+    subgraph UseCases["Use Case SafeExam"]
+        UC01["F01: Registrasi & Login Email"]
+        UC02["F02: Login & Binding Biometrik (Mode A & B)"]
+        UC03["F03: Manajemen & Pencarian Ujian"]
+        UC04["F04: Pelaksanaan Ujian (Timer, Autosave, Submit)"]
+        UC05["F05: Deteksi Integritas (Sensor Gerak & App Switch)"]
+        UC06["F06: Verifikasi Geofence LBS & OpenStreetMap"]
+        UC07["F07: Koreksi Essay Otomatis AI (Gemini)"]
+        UC08["F08: Konversi Waktu Multi-Zona (WIB, WITA, WIT, London)"]
+        UC09["F09: Konversi Biaya Kurs Mata Uang"]
+        UC10["F10: Bank Soal & Pemilihan Soal"]
+        UC11["F11: Mini-Game Pasangan Belajar Pair Rush"]
+        UC12["F12: Profil Pengguna & Unggah Foto Avatar"]
+        UC13["F13: Pengaturan Keamanan & Ganti Password"]
+        UC14["F14: Kirim Kesan & Saran Pembelajaran"]
+        UC15["F15: Pengingat Notifikasi Terjadwal"]
+        UC16["F16: Verifikasi Rantai Hash Audit Blockchain"]
+        UC17["F06B: Monitor Peserta Realtime Dosen"]
+        UC18["F07B: Review Manual & Finalisasi Essay Dosen"]
+    end
+
+    Mahasiswa --> UC01
+    Mahasiswa --> UC02
+    Mahasiswa --> UC03
+    Mahasiswa --> UC04
+    Mahasiswa --> UC06
+    Mahasiswa --> UC08
+    Mahasiswa --> UC09
+    Mahasiswa --> UC11
+    Mahasiswa --> UC12
+    Mahasiswa --> UC13
+    Mahasiswa --> UC14
+    Mahasiswa --> UC15
+    Mahasiswa --> UC16
+
+    Dosen --> UC01
+    Dosen --> UC03
+    Dosen --> UC10
+    Dosen --> UC12
+    Dosen --> UC13
+    Dosen --> UC14
+    Dosen --> UC16
+    Dosen --> UC17
+    Dosen --> UC18
+
+    Sistem --> UC05
+    Sistem --> UC07
+    Sistem --> UC15
+    Sistem --> UC16

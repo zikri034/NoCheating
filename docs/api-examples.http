@@ -1,0 +1,238 @@
+### SafeExam REST API Requests Collection
+### Digunakan dengan REST Client VSCode / IntelliJ / Postman
+
+@baseUrl = http://localhost:3000/api
+@lecturerEmail = dosen@safeexam.ac.id
+@studentEmail = budi.student@safeexam.ac.id
+@password = Password123!
+
+### ==========================================
+### 1. AUTENTIKASI & BIOMETRIK
+### ==========================================
+
+### 1.1 Login Dosen
+# @name loginLecturer
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{lecturerEmail}}",
+  "password": "{{password}}"
+}
+
+### Simpan token dosen
+@lecturerToken = {{loginLecturer.response.body.access_token}}
+
+### 1.2 Login Mahasiswa
+# @name loginStudent
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{studentEmail}}",
+  "password": "{{password}}"
+}
+
+### Simpan token mahasiswa
+@studentToken = {{loginStudent.response.body.access_token}}
+@refreshToken = {{loginStudent.response.body.refresh_token}}
+
+### 1.3 Refresh Access Token
+POST {{baseUrl}}/auth/refresh
+Content-Type: application/json
+
+{
+  "refresh_token": "{{refreshToken}}"
+}
+
+### 1.4 Daftarkan Perangkat Biometrik (Mode B)
+POST {{baseUrl}}/auth/biometric/enroll
+Authorization: Bearer {{studentToken}}
+Content-Type: application/json
+
+{
+  "device_id": "tecno-device-001",
+  "device_name": "TECNO Spark 20 Pro",
+  "device_secret": "secure_device_secret_hash_value_123"
+}
+
+### 1.5 Login Menggunakan Biometrik (Mode B)
+POST {{baseUrl}}/auth/biometric/login
+Content-Type: application/json
+
+{
+  "device_id": "tecno-device-001",
+  "device_secret": "secure_device_secret_hash_value_123"
+}
+
+### 1.6 Lihat Perangkat Biometrik Terdaftar
+GET {{baseUrl}}/me/devices
+Authorization: Bearer {{studentToken}}
+
+### ==========================================
+### 2. PROFIL & WAKTU SERVER
+### ==========================================
+
+### 2.1 Ambil Waktu Otoritatif Server
+GET {{baseUrl}}/time
+Authorization: Bearer {{studentToken}}
+
+### 2.2 Ambil Profil Pengguna
+GET {{baseUrl}}/me
+Authorization: Bearer {{studentToken}}
+
+### 2.3 Ubah Profil Pengguna
+PATCH {{baseUrl}}/me
+Authorization: Bearer {{studentToken}}
+Content-Type: application/json
+
+{
+  "full_name": "Budi Hartono Santoso"
+}
+
+### ==========================================
+### 3. UJIAN & BANK SOAL
+### ==========================================
+
+### 3.1 Dapatkan Daftar Ujian
+GET {{baseUrl}}/exams?page=1&status=ongoing
+Authorization: Bearer {{studentToken}}
+
+### 3.2 Cari Bank Soal (Dosen)
+GET {{baseUrl}}/questions?type=essay
+Authorization: Bearer {{lecturerToken}}
+
+### 3.3 Enroll Ujian oleh Mahasiswa
+# Ganti :examId dengan UUID ujian
+@examId = 00000000-0000-0000-0000-000000000001
+POST {{baseUrl}}/exams/{{examId}}/enroll
+Authorization: Bearer {{studentToken}}
+
+### ==========================================
+### 4. PELAKSANAAN UJIAN (ATTEMPT)
+### ==========================================
+
+### 4.1 Mulai Attempt Ujian
+# @name startAttempt
+POST {{baseUrl}}/exams/{{examId}}/attempts
+Authorization: Bearer {{studentToken}}
+
+@attemptId = {{startAttempt.response.body.attempt.id}}
+
+### 4.2 Simpan Batch Jawaban Draft
+PUT {{baseUrl}}/attempts/{{attemptId}}/answers
+Authorization: Bearer {{studentToken}}
+Content-Type: application/json
+
+{
+  "answers": [
+    {
+      "question_id": "00000000-0000-0000-0000-000000000010",
+      "selected_option": "B"
+    },
+    {
+      "question_id": "00000000-0000-0000-0000-000000000011",
+      "answer_text": "Polimorfisme adalah kemampuan suatu objek untuk memiliki banyak bentuk dalam pemrograman berorientasi objek."
+    }
+  ]
+}
+
+### 4.3 Kirim Laporan Pelanggaran Integritas
+POST {{baseUrl}}/attempts/{{attemptId}}/violations
+Authorization: Bearer {{studentToken}}
+Content-Type: application/json
+
+{
+  "type": "APP_BACKGROUNDED",
+  "severity": "warn",
+  "detail": { "duration_seconds": 3 },
+  "occurred_at": "2026-10-18T10:15:30Z"
+}
+
+### 4.4 Submit Ujian (Memicu Blok SUBMISSION & Koreksi AI)
+POST {{baseUrl}}/attempts/{{attemptId}}/submit
+Authorization: Bearer {{studentToken}}
+
+### 4.5 Cek Hasil & Nilai Ujian
+GET {{baseUrl}}/attempts/{{attemptId}}/result
+Authorization: Bearer {{studentToken}}
+
+### ==========================================
+### 5. MONITOR & REVIEW DOSEN
+### ==========================================
+
+### 5.1 Monitor Peserta Realtime (Dosen)
+GET {{baseUrl}}/exams/{{examId}}/monitor
+Authorization: Bearer {{lecturerToken}}
+
+### 5.2 Antrean Review Essay (Dosen)
+GET {{baseUrl}}/reviews?status=ai_graded
+Authorization: Bearer {{lecturerToken}}
+
+### 5.3 Finalisasi Nilai Essay Dosen (Memicu Blok RESULT)
+@gradeId = 00000000-0000-0000-0000-000000000020
+PATCH {{baseUrl}}/essay-grades/{{gradeId}}
+Authorization: Bearer {{lecturerToken}}
+Content-Type: application/json
+
+{
+  "teacher_score": 95,
+  "teacher_comment": "Penjelasan sangat komprehensif dan tepat sasaran."
+}
+
+### ==========================================
+### 6. FITUR INTEGRITAS BLOCKCHAIN
+### ==========================================
+
+### 6.1 Lihat Seluruh Rantai Hash Audit
+GET {{baseUrl}}/chain
+Authorization: Bearer {{studentToken}}
+
+### 6.2 Verifikasi Integritas Rantai Blok
+GET {{baseUrl}}/chain/verify
+Authorization: Bearer {{studentToken}}
+
+### 6.3 Ambil Tanda Bukti Kriptografis (Receipt)
+GET {{baseUrl}}/chain/receipt/{{attemptId}}
+Authorization: Bearer {{studentToken}}
+
+### ==========================================
+### 7. FITUR PELENGKAP (KURS, GAME, FEEDBACK)
+### ==========================================
+
+### 7.1 Dapatkan Kurs Mata Uang (IDR ke USD, EUR, MYR, JPY)
+GET {{baseUrl}}/fx
+Authorization: Bearer {{studentToken}}
+
+### 7.2 Dapatkan Pasangan Belajar Pair Rush
+GET {{baseUrl}}/pairs
+Authorization: Bearer {{studentToken}}
+
+### 7.3 Kirim Skor Pair Rush
+POST {{baseUrl}}/game/scores
+Authorization: Bearer {{studentToken}}
+Content-Type: application/json
+
+{
+  "score": 1250,
+  "duration_ms": 28450
+}
+
+### 7.4 Lihat Leaderboard Pair Rush
+GET {{baseUrl}}/game/scores
+Authorization: Bearer {{studentToken}}
+
+### 7.5 Kirim Kesan & Saran (Mahasiswa)
+POST {{baseUrl}}/feedback
+Authorization: Bearer {{studentToken}}
+Content-Type: application/json
+
+{
+  "impression": "Aplikasi ujian sangat mulus, responsif, dan sistem verifikasi biometriknya membuat ujian terasa sangat aman.",
+  "suggestion": "Tambahkan fitur latihan mandiri sebelum ujian resmi dimulai.",
+  "rating": 5
+}
+
+### 7.6 Lihat Daftar Kesan & Saran (Dosen)
+GET {{baseUrl}}/feedback
+Authorization: Bearer {{lecturerToken}}

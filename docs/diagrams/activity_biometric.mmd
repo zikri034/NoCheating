@@ -1,0 +1,41 @@
+stateDiagram-v2
+    [*] --> BukaAplikasi: Pengguna membuka aplikasi SafeExam
+    BukaAplikasi --> CekPerangkat: Periksa ketersediaan hardware biometrik di Flutter
+
+    state CekPerangkat <<choice>>
+    CekPerangkat --> BiometrikTersedia: Sensor Fingerprint / Face ID ada
+    CekPerangkat --> BiometrikTidakTersedia: Sensor tidak didukung
+
+    BiometrikTidakTersedia --> LoginPassword: Tampilkan form login konvensional
+    LoginPassword --> [*]
+
+    BiometrikTersedia --> CekEnrolled: Cek apakah perangkat sudah di-enroll di server
+    state CekEnrolled <<choice>>
+    CekEnrolled --> BelumEnrolled: Device Secret belum tersimpan
+    CekEnrolled --> SudahEnrolled: Device Secret ada di Flutter Secure Storage
+
+    BelumEnrolled --> LoginPassword: Login email & password terlebih dahulu
+    LoginPassword --> SuksesLogin: Token JWT tersimpan
+    SuksesLogin --> TawarkanEnroll: Dialog 'Aktifkan Biometrik untuk login cepat?'
+    TawarkanEnroll --> GenerateSecret: Buat random device_secret & panggil local_auth
+    GenerateSecret --> KirimEnroll: POST /api/auth/biometric/enroll
+    KirimEnroll --> SimpanSecureStorage: Simpan device_secret di secure storage
+    SimpanSecureStorage --> [*]
+
+    SudahEnrolled --> PromptBiometrik: Tampilkan pop-up sensor biometrik (Mode B)
+    state HasilSensor <<choice>>
+    PromptBiometrik --> HasilSensor
+    HasilSensor --> GagalSensor: Pembatalan / 3x salah sensor
+    HasilSensor --> BerhasilSensor: Verifikasi lokal OS sukses
+
+    GagalSensor --> LoginPassword: Fallback ke login email & password
+    BerhasilSensor --> KirimLoginBiometrik: POST /api/auth/biometric/login {device_id, device_secret}
+
+    state ValidasiServer <<choice>>
+    KirimLoginBiometrik --> ValidasiServer
+    ValidasiServer --> DitolakServer: Hash secret tidak cocok / perangkat dicabut
+    ValidasiServer --> DiterimaServer: Hash cocok (constant-time compare)
+
+    DitolakServer --> LoginPassword: Bersihkan secure storage & fallback password
+    DiterimaServer --> MasukAplikasi: Berikan access_token & refresh_token
+    MasukAplikasi --> [*]

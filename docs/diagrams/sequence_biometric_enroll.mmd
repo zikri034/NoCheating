@@ -1,0 +1,20 @@
+sequenceDiagram
+    autonumber
+    actor Pengguna as Pengguna
+    participant UI as Flutter App (ProfileScreen)
+    participant BioPlugin as local_auth Plugin
+    participant SecStore as Flutter Secure Storage
+    participant API as Express API Server (/auth/biometric/enroll)
+    participant DB as PostgreSQL (biometric_devices)
+
+    Pengguna->>UI: Klik 'Daftarkan Biometrik'
+    UI->>BioPlugin: authenticate(localizedReason: "Pindai biometrik untuk binding")
+    BioPlugin-->>UI: Verifikasi Berhasil (OS Level)
+    UI->>UI: Generate random UUID device_id & secret token
+    UI->>API: POST /api/auth/biometric/enroll {device_id, device_name, device_secret}<br/>[Bearer JWT]
+    API->>API: Hash device_secret dengan SHA-256
+    API->>DB: INSERT INTO biometric_devices (user_id, device_id, device_name, device_secret_hash)
+    DB-->>API: Pendaftaran Tersimpan
+    API-->>UI: 201 Created {message: "Biometric enrolled successfully"}
+    UI->>SecStore: Simpan device_id & raw device_secret
+    UI-->>Pengguna: Notifikasi 'Biometrik berhasil didaftarkan'

@@ -1,0 +1,165 @@
+erDiagram
+    users ||--o{ biometric_devices : "memiliki"
+    users ||--o{ courses : "mengampu"
+    users ||--o{ questions : "membuat"
+    users ||--o{ exams : "membuat"
+    users ||--o{ enrollments : "terdaftar"
+    users ||--o{ exam_attempts : "mengerjakan"
+    users ||--o{ game_scores : "mencatat"
+    users ||--o{ course_feedback : "memberikan"
+
+    courses ||--o{ exams : "menaungi"
+    courses ||--o{ questions : "memiliki"
+    courses ||--o{ study_pairs : "memiliki"
+
+    exams ||--o{ exam_questions : "berisi"
+    questions ||--o{ exam_questions : "dimuat_dalam"
+    exams ||--o{ enrollments : "menerima"
+    exams ||--o{ exam_attempts : "memiliki"
+
+    exam_attempts ||--o{ attempt_answers : "memuat"
+    exam_attempts ||--o{ violation_events : "mencatat"
+    questions ||--o{ attempt_answers : "dijawab_pada"
+    attempt_answers ||--o| essay_grades : "dinilai_dalam"
+
+    users {
+        uuid id PK
+        string email UK
+        string password_hash
+        string full_name
+        string role
+        string avatar_url
+        int failed_attempts
+        timestamptz locked_until
+    }
+
+    biometric_devices {
+        uuid id PK
+        uuid user_id FK
+        string device_id UK
+        string device_name
+        string device_secret_hash
+        timestamptz last_used_at
+    }
+
+    courses {
+        uuid id PK
+        string code UK
+        string name
+        uuid lecturer_id FK
+    }
+
+    exams {
+        uuid id PK
+        uuid course_id FK
+        string title
+        timestamptz start_time
+        timestamptz end_time
+        int duration_minutes
+        boolean shuffle_questions
+        boolean geofence_enabled
+        double geofence_lat
+        double geofence_lng
+        double geofence_radius_meters
+        numeric exam_fee_idr
+        string status
+    }
+
+    questions {
+        uuid id PK
+        uuid course_id FK
+        string type
+        text body
+        jsonb options
+        string correct_option
+        text rubric
+        text model_answer
+        numeric max_score
+    }
+
+    exam_attempts {
+        uuid id PK
+        uuid exam_id FK
+        uuid student_id FK
+        timestamptz started_at
+        timestamptz server_deadline
+        timestamptz submitted_at
+        string status
+        int critical_count
+        numeric total_score
+        bigint seed
+    }
+
+    attempt_answers {
+        uuid id PK
+        uuid attempt_id FK
+        uuid question_id FK
+        string selected_option
+        text answer_text
+        timestamptz updated_at
+    }
+
+    essay_grades {
+        uuid id PK
+        uuid answer_id FK
+        numeric ai_score
+        jsonb ai_json
+        string confidence
+        jsonb flags
+        string status
+        numeric teacher_score
+        text teacher_comment
+        numeric final_score
+        uuid graded_by FK
+    }
+
+    violation_events {
+        bigserial id PK
+        uuid attempt_id FK
+        string type
+        string severity
+        jsonb detail
+        timestamptz occurred_at
+    }
+
+    blocks {
+        bigint idx PK
+        string type
+        char64 prev_hash
+        char64 hash UK
+        text data_canonical
+        jsonb data
+        bigint nonce
+        timestamptz created_at
+    }
+
+    fx_rates {
+        string base PK
+        string quote PK
+        numeric rate
+        timestamptz fetched_at
+    }
+
+    study_pairs {
+        uuid id PK
+        uuid course_id FK
+        text term
+        text definition
+    }
+
+    game_scores {
+        uuid id PK
+        uuid user_id FK
+        int score
+        int duration_ms
+        timestamptz created_at
+    }
+
+    course_feedback {
+        uuid id PK
+        uuid user_id FK
+        text impression
+        text suggestion
+        int rating
+        timestamptz created_at
+    }

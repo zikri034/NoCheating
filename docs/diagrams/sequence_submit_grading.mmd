@@ -1,0 +1,38 @@
+sequenceDiagram
+    autonumber
+    actor Mahasiswa as Mahasiswa
+    actor Dosen as Dosen
+    participant UI as Flutter Mobile App
+    participant API as Express API Server
+    participant Chain as Blockchain Service
+    participant Queue as Essay AI Queue
+    participant Gemini as Google Gemini AI
+    participant DB as PostgreSQL Database
+
+    Mahasiswa->>UI: Klik 'Selesaikan & Kumpulkan Ujian'
+    UI->>API: POST /api/attempts/:id/submit [Bearer Student JWT]
+    API->>DB: UPDATE exam_attempts SET status = 'submitted', submitted_at = now()
+    API->>Chain: appendBlock(type: "SUBMISSION", data: {attempt_id, student_id, ...})
+    Chain->>Chain: Proof-of-Work Mining (Difficulty prefix)
+    Chain->>DB: INSERT INTO blocks (idx, prev_hash, hash, data_canonical, nonce)
+    API->>API: Hitung otomatis nilai MCQ
+    API->>Queue: enqueueEssayGrading(attempt_id)
+    API-->>UI: 200 OK {status: "submitted", receipt_hash: "0000abc..."}
+    UI-->>Mahasiswa: Tampilkan Receipt Pengumpulan & QR Code
+
+    Note over Queue,Gemini: Background AI Grading Job
+    Queue->>DB: Ambil jawaban essay, rubrik, model answer
+    Queue->>Gemini: POST generateContent (Prompt + Rubrik + JSON Schema)
+    Gemini-->>Queue: JSON Response {score, feedback, confidence, flags}
+    Queue->>DB: UPDATE essay_grades SET ai_score, flags, status = 'ai_graded'
+
+    Note over Dosen,DB: Review & Finalisasi Dosen
+    Dosen->>UI: Buka Dasbor Review Dosen
+    UI->>API: GET /api/reviews?status=ai_graded
+    API-->>UI: Daftar jawaban & penilaian AI
+    Dosen->>UI: Setujui/Koreksi Nilai & Tambah Komentar
+    UI->>API: PATCH /api/essay-grades/:id {teacher_score, teacher_comment}
+    API->>DB: UPDATE essay_grades SET teacher_score, final_score, status = 'finalized'
+    API->>Chain: appendBlock(type: "RESULT", data: {attempt_id, final_total_score, ...})
+    Chain->>DB: INSERT INTO blocks (RESULT Block)
+    API-->>UI: 200 OK {message: "Nilai berhasil difinalisasi"}

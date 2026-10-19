@@ -1,0 +1,32 @@
+stateDiagram-v2
+    [*] --> UjianDisubmit: Mahasiswa mengumpulkan ujian
+    UjianDisubmit --> AntrekanEssay: Ambil jawaban essay dari attempt_answers
+
+    state AntrekanEssay {
+        [*] --> SiapkanPrompt: Susun Rubrik, Kunci Jawaban & Jawaban Mahasiswa
+        SiapkanPrompt --> DeteksiInjeksi: Sanitasi Prompt & Deteksi Prompt Injection
+        DeteksiInjeksi --> PanggilGemini: Panggil Gemini 2.5 Flash dengan Structured Output JSON
+        PanggilGemini --> ParseResponse: Terima JSON {score, feedback, confidence, flags}
+        ParseResponse --> ValidasiSkor: Clamp skor dalam batas [0, max_score]
+        ValidasiSkor --> SimpanDraftAI: Update essay_grades (status = ai_graded)
+    }
+
+    AntrekanEssay --> EvaluasiStatus: Cek confidence & flags
+
+    state EvaluasiStatus <<choice>>
+    EvaluasiStatus --> PerluReview: confidence == 'low' OR flags.length > 0
+    EvaluasiStatus --> SiapFinal: confidence != 'low' AND flags.length == 0
+
+    PerluReview --> TandaiReview: Set status = 'needs_review'
+    TandaiReview --> MasukAntreanDosen: Tampil di Dasbor Koreksi Dosen
+
+    SiapFinal --> MasukAntreanDosen: Menunggu konfirmasi dosen
+
+    MasukAntreanDosen --> DosenReview: Dosen membuka halaman koreksi
+    DosenReview --> UbahAtauSetujui: Input teacher_score & teacher_comment
+    UbahAtauSetujui --> FinalisasiSkor: PATCH /api/essay-grades/:id (status = finalized)
+
+    FinalisasiSkor --> HitungTotalScore: Akumulasi nilai MCQ + seluruh Essay
+    HitungTotalScore --> TambahBlokResult: Append blok RESULT ke Blockchain (PoW)
+    TambahBlokResult --> KirimNotifikasi: Trigger notifikasi nilai siap ke mahasiswa
+    KirimNotifikasi --> [*]

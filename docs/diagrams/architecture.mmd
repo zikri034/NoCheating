@@ -1,0 +1,64 @@
+graph TB
+    subgraph Client["Flutter Mobile Client (Dart 3 / Android & iOS)"]
+        UI["UI Layer (Neo-Brutalism Theme)"]
+        Bloc["Provider State Management"]
+        LocalDB[("Local SQLite Database<br/>Cache, Offline Queue, Encrypted Drafts")]
+        SecureStore["Flutter Secure Storage<br/>AES-GCM Key, Tokens"]
+        Sensors["Sensor & Hardware Layer<br/>Accelerometer, Gyroscope, GPS, Biometrics"]
+        Notif["Flutter Local Notifications"]
+    end
+
+    subgraph Gateway["API Gateway / Security (Express.js 5)"]
+        Helmet["Helmet & CORS"]
+        RateLimit["Express Rate Limit"]
+        AuthMiddleware["JWT & Role Authorization"]
+        ZodValidator["Zod Schema Validator"]
+    end
+
+    subgraph Services["Core Backend Services (TypeScript 5)"]
+        AuthSvc["Auth & Biometric Service"]
+        ExamSvc["Exam & Attempt Engine"]
+        AntiCheat["Anti-Cheat Violation Engine"]
+        AISvc["Gemini 2.5 Flash Grading Service"]
+        ChainSvc["Proof-of-Work Blockchain Service"]
+        FxSvc["Exchange Rate FX Service"]
+        GameSvc["Pair Rush Game Service"]
+        FeedbackSvc["Feedback Service"]
+    end
+
+    subgraph Data["Persistent Storage"]
+        Postgres[("PostgreSQL 16 Database<br/>Tables: users, exams, attempts, blocks, fx_rates, etc.")]
+    end
+
+    subgraph External["External Cloud Services"]
+        Gemini["Google Gemini AI API"]
+        ExchangeAPI["Frankfurter FX Rates API"]
+    end
+
+    UI --> Bloc
+    Bloc --> LocalDB
+    Bloc --> SecureStore
+    Bloc --> Sensors
+    Bloc --> Notif
+    Bloc -->|REST JSON HTTPS| Helmet
+
+    Helmet --> RateLimit --> AuthMiddleware --> ZodValidator
+    ZodValidator --> AuthSvc
+    ZodValidator --> ExamSvc
+    ZodValidator --> AntiCheat
+    ZodValidator --> AISvc
+    ZodValidator --> ChainSvc
+    ZodValidator --> FxSvc
+    ZodValidator --> GameSvc
+    ZodValidator --> FeedbackSvc
+
+    AuthSvc --> Postgres
+    ExamSvc --> Postgres
+    AntiCheat --> Postgres
+    ChainSvc --> Postgres
+    FxSvc --> Postgres
+    GameSvc --> Postgres
+    FeedbackSvc --> Postgres
+
+    AISvc -->|Prompt & Rubric| Gemini
+    FxSvc -->|Live Rates Fetch| ExchangeAPI

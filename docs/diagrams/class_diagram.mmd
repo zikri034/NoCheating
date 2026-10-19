@@ -1,0 +1,109 @@
+classDiagram
+    class User {
+        +String id
+        +String email
+        +String fullName
+        +String role
+        +String avatarUrl
+    }
+
+    class Exam {
+        +String id
+        +String title
+        +DateTime startTime
+        +DateTime endTime
+        +int durationMinutes
+        +bool shuffleQuestions
+        +bool geofenceEnabled
+        +double geofenceLat
+        +double geofenceLng
+        +double geofenceRadiusMeters
+        +double examFeeIdr
+        +String status
+    }
+
+    class Question {
+        +String id
+        +String courseId
+        +String type
+        +String body
+        +List~String~ options
+        +double maxScore
+    }
+
+    class ExamAttempt {
+        +String id
+        +String examId
+        +String studentId
+        +DateTime startedAt
+        +DateTime serverDeadline
+        +DateTime submittedAt
+        +String status
+        +int criticalCount
+        +double totalScore
+    }
+
+    class AttemptAnswer {
+        +String id
+        +String attemptId
+        +String questionId
+        +String selectedOption
+        +String answerText
+        +DateTime updatedAt
+    }
+
+    class EssayGrade {
+        +String id
+        +String answerId
+        +double aiScore
+        +String confidence
+        +List~String~ flags
+        +String status
+        +double teacherScore
+        +String teacherComment
+        +double finalScore
+    }
+
+    class ViolationEvent {
+        +int id
+        +String attemptId
+        +String type
+        +String severity
+        +Map detail
+        +DateTime occurredAt
+    }
+
+    class Block {
+        +int idx
+        +String type
+        +String prevHash
+        +String hash
+        +String dataCanonical
+        +int nonce
+        +DateTime createdAt
+    }
+
+    class TimezoneService {
+        +DateTime nowUtc()
+        +Map~String, String~ convertToAllZones(DateTime utc)
+        +int calculateDayOffset(DateTime date, String timeZoneName)
+    }
+
+    class FxService {
+        +Future~Map~String, double~~ getRates()
+        +double convertFromIdr(double amountIdr, String targetCurrency)
+    }
+
+    class NotificationService {
+        +Future~void~ initialize()
+        +Future~void~ scheduleExamReminders(Exam exam)
+        +Future~void~ showGradeNotification(String examTitle, double score)
+    }
+
+    User "1" --> "*" ExamAttempt
+    Exam "1" --> "*" Question
+    Exam "1" --> "*" ExamAttempt
+    ExamAttempt "1" --> "*" AttemptAnswer
+    ExamAttempt "1" --> "*" ViolationEvent
+    AttemptAnswer "1" --> "0..1" EssayGrade
+    ExamAttempt ..> Block : recorded as receipt

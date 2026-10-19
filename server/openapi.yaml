@@ -1,0 +1,586 @@
+openapi: 3.0.3
+info:
+  title: SafeExam API Specification
+  description: API REST backend SafeExam - Ujian Online Berintegritas Tinggi dengan Verifikasi Biometrik, AI Essay Grading, dan Hash-chain Blockchain.
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000/api
+    description: Server Lokal
+  - url: http://10.0.2.2:3000/api
+    description: Android Emulator Host
+paths:
+  /auth/register:
+    post:
+      summary: Registrasi pengguna baru
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, full_name, role]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+                full_name: { type: string }
+                role: { type: string, enum: [student, lecturer] }
+      responses:
+        201:
+          description: Berhasil registrasi
+  /auth/login:
+    post:
+      summary: Login email dan password
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        200:
+          description: Berhasil login
+  /auth/refresh:
+    post:
+      summary: Refresh access token
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        200:
+          description: Token baru diberikan
+  /auth/logout:
+    post:
+      summary: Logout dan cabut refresh token
+      tags: [Auth]
+      security:
+        - BearerAuth: []
+      responses:
+        200:
+          description: Berhasil logout
+  /auth/biometric/enroll:
+    post:
+      summary: Daftarkan perangkat biometrik (Mode B)
+      tags: [Biometrics]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [device_id, device_name, device_secret]
+              properties:
+                device_id: { type: string }
+                device_name: { type: string }
+                device_secret: { type: string }
+      responses:
+        201:
+          description: Perangkat biometrik terdaftar
+  /auth/biometric/login:
+    post:
+      summary: Login cepat menggunakan biometrik
+      tags: [Biometrics]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [device_id, device_secret]
+              properties:
+                device_id: { type: string }
+                device_secret: { type: string }
+      responses:
+        200:
+          description: Berhasil login biometrik
+  /auth/biometric/{deviceId}:
+    delete:
+      summary: Cabut pendaftaran perangkat biometrik
+      tags: [Biometrics]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: deviceId
+          required: true
+          schema: { type: string }
+      responses:
+        200:
+          description: Perangkat dicabut
+  /me/devices:
+    get:
+      summary: Daftar perangkat biometrik terdaftar pengguna
+      tags: [User Profile]
+      security:
+        - BearerAuth: []
+      responses:
+        200:
+          description: Daftar perangkat
+  /me:
+    get:
+      summary: Dapatkan profil pengguna saat ini
+      tags: [User Profile]
+      security:
+        - BearerAuth: []
+      responses:
+        200:
+          description: Detail profil pengguna
+    patch:
+      summary: Perbarui nama lengkap profil
+      tags: [User Profile]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                full_name: { type: string }
+      responses:
+        200:
+          description: Profil diperbarui
+  /me/avatar:
+    post:
+      summary: Unggah foto profil avatar (multipart/form-data)
+      tags: [User Profile]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                avatar:
+                  type: string
+                  format: binary
+      responses:
+        200:
+          description: Avatar berhasil diperbarui
+  /me/password:
+    post:
+      summary: Ganti password akun (mencabut seluruh biometrik)
+      tags: [User Profile]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password, new_password]
+              properties:
+                current_password: { type: string }
+                new_password: { type: string, minLength: 8 }
+      responses:
+        200:
+          description: Password diubah
+  /exams:
+    get:
+      summary: Daftar ujian (filter status, search, pagination)
+      tags: [Exams]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: search
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { type: string, enum: [upcoming, ongoing, completed, draft] }
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+      responses:
+        200:
+          description: Daftar ujian
+    post:
+      summary: Buat jadwal ujian baru (Dosen)
+      tags: [Exams]
+      security:
+        - BearerAuth: []
+      responses:
+        201:
+          description: Ujian dibuat
+  /exams/{id}:
+    get:
+      summary: Dapatkan detail ujian
+      tags: [Exams]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        200:
+          description: Detail ujian
+    patch:
+      summary: Ubah jadwal atau pengaturan ujian (Dosen)
+      tags: [Exams]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        200:
+          description: Ujian diubah
+  /exams/{id}/questions:
+    post:
+      summary: Tambahkan kumpulan soal ke ujian (Dosen)
+      tags: [Exams]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [question_ids]
+              properties:
+                question_ids:
+                  type: array
+                  items: { type: string, format: uuid }
+      responses:
+        200:
+          description: Soal berhasil ditambahkan ke ujian
+  /exams/{id}/enroll:
+    post:
+      summary: Pendaftaran mahasiswa ke ujian
+      tags: [Exams]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        200:
+          description: Berhasil terdaftar
+  /questions:
+    get:
+      summary: Cari bank soal (Dosen)
+      tags: [Questions]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: search
+          schema: { type: string }
+        - in: query
+          name: type
+          schema: { type: string, enum: [mcq, essay] }
+      responses:
+        200:
+          description: Daftar soal
+    post:
+      summary: Buat soal baru (Dosen)
+      tags: [Questions]
+      security:
+        - BearerAuth: []
+      responses:
+        201:
+          description: Soal tersimpan
+  /exams/{id}/attempts:
+    post:
+      summary: Mulai pelaksanaan sesi ujian (Mahasiswa)
+      tags: [Attempts]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        201:
+          description: Sesi attempt dibuat dengan soal teracak
+  /attempts/{id}/answers:
+    put:
+      summary: Sinkronisasi batch draft jawaban mahasiswa
+      tags: [Attempts]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [answers]
+              properties:
+                answers:
+                  type: array
+                  items:
+                    type: object
+                    required: [question_id]
+                    properties:
+                      question_id: { type: string, format: uuid }
+                      selected_option: { type: string }
+                      answer_text: { type: string }
+      responses:
+        200:
+          description: Draft jawaban tersimpan
+  /attempts/{id}/violations:
+    post:
+      summary: Kirim rekaman pelanggaran integritas (sensor, background, geofence)
+      tags: [Attempts]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, severity, occurred_at]
+              properties:
+                type: { type: string }
+                severity: { type: string, enum: [warn, critical] }
+                detail: { type: object }
+                occurred_at: { type: string, format: date-time }
+      responses:
+        201:
+          description: Kejadian pelanggaran dicatat
+  /attempts/{id}/submit:
+    post:
+      summary: Kumpulkan dan akhiri ujian (memicu hash-chain SUBMISSION dan autograde)
+      tags: [Attempts]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        200:
+          description: Ujian terkumpul dan blok tercatat
+  /attempts/{id}/result:
+    get:
+      summary: Dapatkan hasil ujian, rincian skor, dan umpan balik AI
+      tags: [Attempts]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        200:
+          description: Nilai dan hasil ujian
+  /exams/{id}/monitor:
+    get:
+      summary: Dasbor pemantauan peserta dan pelanggaran realtime (Dosen)
+      tags: [Lecturer Reviews]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        200:
+          description: Rekap monitor peserta ujian
+  /reviews:
+    get:
+      summary: Antrean review jawaban essay oleh dosen
+      tags: [Lecturer Reviews]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string, enum: [pending, ai_graded, needs_review, finalized] }
+      responses:
+        200:
+          description: Antrean koreksi essay
+  /essay-grades/{id}:
+    patch:
+      summary: Finalisasi nilai koreksi essay oleh dosen (memicu hash-chain RESULT)
+      tags: [Lecturer Reviews]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [teacher_score]
+              properties:
+                teacher_score: { type: number }
+                teacher_comment: { type: string }
+      responses:
+        200:
+          description: Nilai essay difinalisasi
+  /fx:
+    get:
+      summary: Dapatkan kurs mata uang terkini (IDR ke USD, EUR, MYR, JPY)
+      tags: [Complementary]
+      security:
+        - BearerAuth: []
+      responses:
+        200:
+          description: Data kurs mata uang
+  /pairs:
+    get:
+      summary: Dapatkan pasangan istilah Pair Rush berdasarkan mata kuliah
+      tags: [Complementary]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: courseId
+          schema: { type: string, format: uuid }
+      responses:
+        200:
+          description: Pasangan kartu belajar
+  /game/scores:
+    post:
+      summary: Kirim skor permainan Pair Rush
+      tags: [Complementary]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [score, duration_ms]
+              properties:
+                score: { type: integer }
+                duration_ms: { type: integer }
+      responses:
+        201:
+          description: Skor tersimpan
+    get:
+      summary: Dapatkan top 10 leaderboard skor Pair Rush
+      tags: [Complementary]
+      security:
+        - BearerAuth: []
+      responses:
+        200:
+          description: Papan peringkat teratas
+  /feedback:
+    post:
+      summary: Kirim kesan dan saran mata kuliah / aplikasi
+      tags: [Complementary]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [impression, rating]
+              properties:
+                impression: { type: string }
+                suggestion: { type: string }
+                rating: { type: integer, minimum: 1, maximum: 5 }
+      responses:
+        201:
+          description: Umpan balik tersimpan
+    get:
+      summary: Daftar masukan umpan balik (Dosen)
+      tags: [Complementary]
+      security:
+        - BearerAuth: []
+      responses:
+        200:
+          description: Daftar umpan balik
+  /chain:
+    get:
+      summary: Dapatkan seluruh riwayat blok rantai hash audit integritas
+      tags: [Blockchain]
+      security:
+        - BearerAuth: []
+      responses:
+        200:
+          description: Daftar blok audit
+  /chain/verify:
+    get:
+      summary: Verifikasi integritas kriptografis dan rantai hash keseluruhan
+      tags: [Blockchain]
+      security:
+        - BearerAuth: []
+      responses:
+        200:
+          description: Status keabsahan rantai blok
+  /chain/receipt/{attemptId}:
+    get:
+      summary: Dapatkan receipt kriptografis tanda bukti pengumpulan ujian
+      tags: [Blockchain]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: attemptId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        200:
+          description: Receipt pengumpulan ujian
+  /time:
+    get:
+      summary: Waktu server otoritatif untuk sinkronisasi timer klien
+      tags: [Core]
+      security:
+        - BearerAuth: []
+      responses:
+        200:
+          description: Waktu ISO server
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
