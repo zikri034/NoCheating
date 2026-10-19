@@ -203,7 +203,7 @@ class _ExtractQuestionsDialogState extends State<ExtractQuestionsDialog> {
           'correct_option': q['correct_option']?.toString().trim(),
           'rubric': q['rubric']?.toString().trim(),
           'model_answer': q['model_answer']?.toString().trim(),
-          'max_score': (q['max_score'] as num?)?.toDouble() ?? 10.0,
+          'max_score': double.tryParse(q['max_score']?.toString() ?? '') ?? 10.0,
         };
       }).toList();
 
@@ -614,8 +614,8 @@ class _ExtractQuestionsDialogState extends State<ExtractQuestionsDialog> {
                           final q = _extractedQuestions[index];
                           final isSelected = _selectedIndices.contains(index);
                           final isMcq = q['type'] == 'mcq';
-                          final options = (q['options'] as List? ?? []).cast<String>();
-                          final correctOpt = q['correct_option'] as String?;
+                          final options = (q['options'] as List? ?? []).map((e) => e.toString()).toList();
+                          final correctOpt = q['correct_option']?.toString();
 
                           return GestureDetector(
                             onTap: () => _toggleQuestion(index),

@@ -33,9 +33,9 @@ class AttemptModel {
           DateTime.now().add(const Duration(hours: 1)),
       submittedAt: json['submitted_at'] != null ? DateTime.tryParse(json['submitted_at'].toString()) : null,
       status: json['status'] as String? ?? 'in_progress',
-      totalScore: (json['total_score'] as num?)?.toDouble(),
-      seed: (json['seed'] as num?)?.toInt() ?? 0,
-      criticalCount: (json['critical_count'] as num?)?.toInt() ?? 0,
+      totalScore: double.tryParse(json['total_score']?.toString() ?? ''),
+      seed: int.tryParse(json['seed']?.toString() ?? '') ?? 0,
+      criticalCount: int.tryParse(json['critical_count']?.toString() ?? '') ?? 0,
     );
   }
 

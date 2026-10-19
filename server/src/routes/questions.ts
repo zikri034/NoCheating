@@ -244,7 +244,11 @@ router.post(
           };
         });
 
-        return await trx('questions').insert(rowsToInsert).returning('*');
+        const rows = await trx('questions').insert(rowsToInsert).returning('*');
+        return rows.map((r: any) => ({
+          ...r,
+          max_score: Number(r.max_score) || 10,
+        }));
       });
 
       return res.status(201).json({
