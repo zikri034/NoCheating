@@ -88,7 +88,7 @@ router.get('/', jwtMiddleware, async (req: Request, res: Response) => {
     const total = parseInt((countResult as any)?.total || '0', 10);
 
     const exams = await query
-      .orderBy('exams.created_at', 'desc')
+      .orderBy('exams.start_at', 'desc')
       .limit(pageSize)
       .offset(offset);
 

@@ -179,10 +179,24 @@ router.post(
       });
     } catch (error: any) {
       console.error('Error extracting questions from document:', error);
+      let userMessage = error.message || 'Gagal mengekstrak soal dari dokumen';
+      if (
+        error?.status === 503 ||
+        error?.message?.includes('503') ||
+        error?.message?.includes('high demand') ||
+        error?.message?.includes('UNAVAILABLE')
+      ) {
+        userMessage =
+          'Layanan Google Gemini AI sedang mengalami lonjakan beban server (High Demand / 503). Silakan ulangi dalam beberapa detik.';
+      } else if (error?.status === 429 || error?.message?.includes('429')) {
+        userMessage =
+          'Batas kuota harian/menit API Gemini tercapai (Rate Limit / 429). Silakan tunggu sebentar.';
+      }
+
       return res.status(500).json({
         error: {
           code: 'EXTRACTION_FAILED',
-          message: error.message || 'Gagal mengekstrak soal dari dokumen',
+          message: userMessage,
         },
       });
     }

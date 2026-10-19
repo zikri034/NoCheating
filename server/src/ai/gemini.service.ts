@@ -60,24 +60,30 @@ export class GeminiService {
     model: string;
     cached: boolean;
   }> {
-    const model = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
-    const cacheKey = this.computeCacheKey(input.studentAnswer, input.rubric, model);
+    const primaryModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    const candidateModels = Array.from(
+      new Set([primaryModel, 'gemini-2.5-flash', 'gemini-3.5-flash', 'gemini-3.8-flash'])
+    );
 
     // 1. Check in-memory cache
-    if (this.cache.has(cacheKey)) {
-      return {
-        result: this.cache.get(cacheKey)!,
-        model,
-        cached: true,
-      };
+    for (const m of candidateModels) {
+      const cKey = this.computeCacheKey(input.studentAnswer, input.rubric, m);
+      if (this.cache.has(cKey)) {
+        return {
+          result: this.cache.get(cKey)!,
+          model: m,
+          cached: true,
+        };
+      }
     }
 
     // 2. If a mock handler is configured (e.g. during testing)
     if (this.mockHandler) {
       const mockResult = await this.mockHandler(input);
       const validated = this.validateAndClampResult(mockResult, input.maxScore);
+      const cacheKey = this.computeCacheKey(input.studentAnswer, input.rubric, primaryModel);
       this.cache.set(cacheKey, validated);
-      return { result: validated, model, cached: false };
+      return { result: validated, model: primaryModel, cached: false };
     }
 
     // 3. Fallback when GEMINI_API_KEY is not configured
@@ -89,45 +95,50 @@ export class GeminiService {
     const ai = new GoogleGenAI({ apiKey });
     const promptText = buildEssayGradingPrompt(input);
 
-    // Retry configuration with exponential backoff (PRD F07)
-    const maxRetries = 3;
-    let delayMs = 1000;
     let lastError: any = null;
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        const response = await ai.models.generateContent({
-          model,
-          contents: promptText,
-          config: {
-            systemInstruction: SYSTEM_INSTRUCTION,
-            temperature: 0.1,
-            responseMimeType: 'application/json',
-            responseSchema: GEMINI_JSON_SCHEMA,
-          },
-        });
+    // Multi-model resilience: try candidate models with exponential backoff
+    for (const modelToUse of candidateModels) {
+      const maxRetries = 2;
+      let delayMs = 800;
 
-        const rawText = response.text;
-        if (!rawText) {
-          throw new Error('EMPTY_GEMINI_RESPONSE');
-        }
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          const response = await ai.models.generateContent({
+            model: modelToUse,
+            contents: promptText,
+            config: {
+              systemInstruction: SYSTEM_INSTRUCTION,
+              temperature: 0.1,
+              responseMimeType: 'application/json',
+              responseSchema: GEMINI_JSON_SCHEMA,
+            },
+          });
 
-        const parsedJson = JSON.parse(rawText);
-        const validated = this.validateAndClampResult(parsedJson, input.maxScore);
+          const rawText = response.text;
+          if (!rawText) {
+            throw new Error('EMPTY_GEMINI_RESPONSE');
+          }
 
-        this.cache.set(cacheKey, validated);
-        return { result: validated, model, cached: false };
-      } catch (err: any) {
-        lastError = err;
-        const statusCode = err?.status || err?.statusCode || 0;
-        const isRateLimitOrServerError =
-          statusCode === 429 || (statusCode >= 500 && statusCode < 600);
+          const parsedJson = JSON.parse(rawText);
+          const validated = this.validateAndClampResult(parsedJson, input.maxScore);
 
-        if (attempt < maxRetries && isRateLimitOrServerError) {
-          await new Promise((resolve) => setTimeout(resolve, delayMs));
-          delayMs *= 2;
-        } else if (!isRateLimitOrServerError) {
-          break;
+          const cacheKey = this.computeCacheKey(input.studentAnswer, input.rubric, modelToUse);
+          this.cache.set(cacheKey, validated);
+          return { result: validated, model: modelToUse, cached: false };
+        } catch (err: any) {
+          lastError = err;
+          const statusCode = err?.status || err?.statusCode || 0;
+          const isRetryable =
+            statusCode === 429 || statusCode === 503 || (statusCode >= 500 && statusCode < 600);
+
+          if (isRetryable && attempt < maxRetries) {
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
+            delayMs *= 2;
+          } else if (!isRetryable) {
+            // Non-recoverable client error
+            break;
+          }
         }
       }
     }
@@ -142,7 +153,7 @@ export class GeminiService {
     result: ExtractedQuestionsResult;
     model: string;
   }> {
-    const model = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+    const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
     if (this.mockExtractionHandler) {
       const mockResult = await this.mockExtractionHandler(input);
@@ -195,47 +206,56 @@ export class GeminiService {
       contentsPayload = buildQuestionExtractionPrompt(text);
     }
 
-    const maxRetries = 3;
-    let delayMs = 1000;
+    const primaryModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    const candidateModels = Array.from(
+      new Set([primaryModel, 'gemini-2.5-flash', 'gemini-3.5-flash', 'gemini-3.8-flash'])
+    );
+
     let lastError: any = null;
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        const response = await ai.models.generateContent({
-          model,
-          contents: contentsPayload,
-          config: {
-            systemInstruction: QUESTION_EXTRACTION_SYSTEM_INSTRUCTION,
-            temperature: 0.1,
-            responseMimeType: 'application/json',
-            responseSchema: GEMINI_QUESTION_EXTRACTION_SCHEMA,
-          },
-        });
+    // Multi-model resilience: try candidate models with exponential backoff
+    for (const modelToUse of candidateModels) {
+      const maxRetries = 2;
+      let delayMs = 800;
 
-        const rawText = response.text;
-        if (!rawText) {
-          throw new Error('EMPTY_GEMINI_RESPONSE');
-        }
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          const response = await ai.models.generateContent({
+            model: modelToUse,
+            contents: contentsPayload,
+            config: {
+              systemInstruction: QUESTION_EXTRACTION_SYSTEM_INSTRUCTION,
+              temperature: 0.1,
+              responseMimeType: 'application/json',
+              responseSchema: GEMINI_QUESTION_EXTRACTION_SCHEMA,
+            },
+          });
 
-        const parsedJson = JSON.parse(rawText);
-        const validated = extractedQuestionsResultSchema.parse(parsedJson);
+          const rawText = response.text;
+          if (!rawText) {
+            throw new Error('EMPTY_GEMINI_RESPONSE');
+          }
 
-        // Sort questions strictly by question number
-        validated.questions.sort((a, b) => a.number - b.number);
-        validated.total_questions = validated.questions.length;
+          const parsedJson = JSON.parse(rawText);
+          const validated = extractedQuestionsResultSchema.parse(parsedJson);
 
-        return { result: validated, model };
-      } catch (err: any) {
-        lastError = err;
-        const statusCode = err?.status || err?.statusCode || 0;
-        const isRateLimitOrServerError =
-          statusCode === 429 || (statusCode >= 500 && statusCode < 600);
+          // Sort questions strictly by question number
+          validated.questions.sort((a, b) => a.number - b.number);
+          validated.total_questions = validated.questions.length;
 
-        if (attempt < maxRetries && isRateLimitOrServerError) {
-          await new Promise((resolve) => setTimeout(resolve, delayMs));
-          delayMs *= 2;
-        } else if (!isRateLimitOrServerError) {
-          break;
+          return { result: validated, model: modelToUse };
+        } catch (err: any) {
+          lastError = err;
+          const statusCode = err?.status || err?.statusCode || 0;
+          const isRetryable =
+            statusCode === 429 || statusCode === 503 || (statusCode >= 500 && statusCode < 600);
+
+          if (isRetryable && attempt < maxRetries) {
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
+            delayMs *= 2;
+          } else if (!isRetryable) {
+            break;
+          }
         }
       }
     }
