@@ -147,6 +147,20 @@ class ExamProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> deleteExam(String examId) async {
+    try {
+      await _repository.deleteExam(examId);
+      _allExams.removeWhere((e) => e.id == examId);
+      _applyLocalFilters();
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      notifyListeners();
+      return false;
+    }
+  }
+
   Future<void> loadCourses() async {
     _isLoadingCourses = true;
     notifyListeners();

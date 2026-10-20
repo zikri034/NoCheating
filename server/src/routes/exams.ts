@@ -24,6 +24,7 @@ const createExamSchema = z.object({
   max_critical: z.number().int().positive().default(3),
   ai_auto_finalize: z.boolean().default(false),
   status: z.enum(['draft', 'published']).default('draft'),
+  question_ids: z.array(z.string().uuid()).optional(),
 });
 
 const updateExamSchema = createExamSchema.partial();
@@ -37,9 +38,9 @@ const assignQuestionsSchema = z.object({
 // GET /api/exams — list with search, filter, pagination
 router.get('/', jwtMiddleware, async (req: Request, res: Response) => {
   try {
-    const { search, status, page = '1', limit = '20' } = req.query;
+    const { search, status, page = '1', limit = '50' } = req.query;
     const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
-    const pageSize = Math.min(50, Math.max(1, parseInt(limit as string, 10) || 20));
+    const pageSize = Math.min(100, Math.max(1, parseInt(limit as string, 10) || 50));
     const offset = (pageNum - 1) * pageSize;
 
     const userId = (req as any).user?.id;
@@ -191,10 +192,21 @@ router.post('/', jwtMiddleware, requireRole('lecturer'), async (req: Request, re
       });
     }
 
+    const { question_ids, ...examData } = data;
     const [exam] = await db('exams').insert({
-      ...data,
+      ...examData,
       created_by: userId,
     }).returning('*');
+
+    if (question_ids && question_ids.length > 0) {
+      await db('exam_questions').insert(
+        question_ids.map((qid: string, i: number) => ({
+          exam_id: exam.id,
+          question_id: qid,
+          position: i + 1,
+        }))
+      );
+    }
 
     const fullExam = await db('exams')
       .join('courses', 'exams.course_id', 'courses.id')
@@ -247,6 +259,34 @@ router.patch('/:id', jwtMiddleware, requireRole('lecturer'), async (req: Request
         error: { code: 'VALIDATION_ERROR', message: error.issues[0].message },
       });
     }
+    return res.status(500).json({
+      error: { code: 'INTERNAL_ERROR', message: (error as Error).message },
+    });
+  }
+});
+
+// DELETE /api/exams/:id — delete exam (lecturer only)
+router.delete('/:id', jwtMiddleware, requireRole('lecturer'), async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = (req as any).user.id;
+
+    const exam = await db('exams').where({ id, created_by: userId }).first();
+    if (!exam) {
+      return res.status(404).json({
+        error: { code: 'EXAM_NOT_FOUND', message: 'Ujian tidak ditemukan atau Anda bukan pemilik' },
+      });
+    }
+
+    await db.transaction(async (trx) => {
+      await trx('exam_attempts').where({ exam_id: id }).del();
+      await trx('exam_questions').where({ exam_id: id }).del();
+      await trx('enrollments').where({ exam_id: id }).del();
+      await trx('exams').where({ id }).del();
+    });
+
+    return res.json({ success: true, message: 'Ujian berhasil dihapus' });
+  } catch (error) {
     return res.status(500).json({
       error: { code: 'INTERNAL_ERROR', message: (error as Error).message },
     });

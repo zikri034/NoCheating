@@ -179,4 +179,19 @@ describe('Exams and Questions API Tests (F03 & F10)', () => {
     expect(res.body.courses).toBeDefined();
     expect(res.body.courses.length).toBeGreaterThan(0);
   });
+
+  it('DELETE /api/exams/:id should delete exam and its associations (lecturer only)', async () => {
+    const res = await request(app)
+      .delete(`/api/exams/${examId}`)
+      .set('Authorization', `Bearer ${lecturerToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    // Verify it is gone
+    const check = await request(app)
+      .get(`/api/exams/${examId}`)
+      .set('Authorization', `Bearer ${lecturerToken}`);
+    expect(check.status).toBe(404);
+  });
 });

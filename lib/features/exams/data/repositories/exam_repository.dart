@@ -74,6 +74,15 @@ class ExamRepository {
     }
   }
 
+  Future<void> deleteExam(String examId) async {
+    try {
+      await _dio.delete('/exams/$examId');
+    } on DioException catch (e) {
+      final msg = e.response?.data?['error']?['message'] ?? e.message ?? 'Gagal menghapus ujian';
+      throw Exception(msg);
+    }
+  }
+
   Future<List<CourseModel>> fetchCourses() async {
     try {
       final response = await _dio.get('/courses');

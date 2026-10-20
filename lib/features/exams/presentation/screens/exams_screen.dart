@@ -8,6 +8,7 @@ import '../../../../core/widgets/neo_snackbar.dart';
 import '../../../../core/services/geofence_service.dart';
 import '../../../../core/services/biometric_service.dart';
 import '../../../../core/widgets/neo_tag.dart';
+import '../../../../core/widgets/neo_button.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../data/models/exam_model.dart';
 import '../../data/models/question_model.dart';
@@ -40,6 +41,7 @@ class _ExamsScreenState extends State<ExamsScreen> {
 
   int _selectedLecturerTab = 0; // 0 = Ujian, 1 = Bank Soal
   String _selectedQuestionType = 'all'; // all, mcq, essay
+  final Set<String> _selectedBankQuestionIds = {};
 
   @override
   void initState() {
@@ -82,6 +84,7 @@ class _ExamsScreenState extends State<ExamsScreen> {
         onMonitor: isLecturer ? () => _showExamMonitor(examId) : null,
         onViewLocation: () => _showExamLocation(detail['exam']),
         onReviewEssay: isLecturer ? () => _showEssayReviews(examId, detail['exam']?.title) : null,
+        onDeleteExam: isLecturer ? () => _confirmDeleteExam(examId, detail['exam']?.title ?? 'Ujian') : null,
         onAddQuestions: isLecturer
             ? () {
                 Navigator.of(context).pop();
@@ -200,17 +203,23 @@ class _ExamsScreenState extends State<ExamsScreen> {
     );
   }
 
-  void _showCreateExamDialog() {
+  void _showCreateExamDialog({List<String>? initialSelectedQuestionIds}) {
     final examProv = context.read<ExamProvider>();
     showDialog(
       context: context,
       builder: (_) => CreateExamDialog(
         courses: examProv.courses,
+        initialSelectedQuestionIds: initialSelectedQuestionIds,
         onSubmit: (data) async {
           final success = await examProv.createExam(data);
           if (mounted) {
             if (success) {
               await examProv.loadExams();
+              if (initialSelectedQuestionIds != null && initialSelectedQuestionIds.isNotEmpty) {
+                setState(() {
+                  _selectedBankQuestionIds.clear();
+                });
+              }
               if (!mounted) return success;
               NeoSnackbar.showSuccess(
                 context,
@@ -226,6 +235,294 @@ class _ExamsScreenState extends State<ExamsScreen> {
             }
           }
           return success;
+        },
+      ),
+    );
+  }
+
+  void _confirmDeleteExam(String examId, String examTitle) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: NeoColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: NeoColors.ink, width: 3),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: NeoColors.danger, size: 24),
+            SizedBox(width: 8),
+            Text(
+              'HAPUS UJIAN?',
+              style: TextStyle(
+                fontFamily: 'Space Grotesk',
+                fontWeight: FontWeight.w800,
+                fontSize: 16,
+                color: NeoColors.ink,
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'Apakah Anda yakin ingin menghapus ujian "$examTitle"? Seluruh data ujian, peserta, dan butir soal terkait pada ujian ini akan dihapus.',
+          style: const TextStyle(
+            fontFamily: 'Hanken Grotesk',
+            fontSize: 13,
+            color: NeoColors.ink,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text(
+              'BATAL',
+              style: TextStyle(
+                fontFamily: 'Space Grotesk',
+                fontWeight: FontWeight.w800,
+                color: NeoColors.ink,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: NeoColors.danger,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              side: const BorderSide(color: NeoColors.ink, width: 2),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              Navigator.of(context).pop();
+              final examProv = context.read<ExamProvider>();
+              final success = await examProv.deleteExam(examId);
+              if (mounted) {
+                if (success) {
+                  NeoSnackbar.showSuccess(
+                    context,
+                    title: 'UJIAN DIHAPUS',
+                    message: 'Ujian "$examTitle" berhasil dihapus dari sistem.',
+                  );
+                } else {
+                  NeoSnackbar.showError(
+                    context,
+                    title: 'GAGAL MENGHAPUS',
+                    message: examProv.errorMessage ?? 'Gagal menghapus ujian.',
+                  );
+                }
+              }
+            },
+            child: const Text(
+              'HAPUS',
+              style: TextStyle(
+                fontFamily: 'Space Grotesk',
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSelectExamDialog(List<String> questionIds) {
+    final examProv = context.read<ExamProvider>();
+    final exams = examProv.exams;
+
+    if (exams.isEmpty) {
+      NeoSnackbar.showError(
+        context,
+        title: 'BELUM ADA UJIAN',
+        message: 'Buat ujian terlebih dahulu sebelum memasukkan butir soal.',
+      );
+      return;
+    }
+
+    String selectedExamId = exams.first.id;
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (innerCtx, setDialogState) {
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 480),
+              decoration: BoxDecoration(
+                color: NeoColors.surface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: NeoColors.ink, width: 3),
+                boxShadow: const [
+                  BoxShadow(
+                    color: NeoColors.ink,
+                    offset: Offset(6, 6),
+                    blurRadius: 0,
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: const BoxDecoration(
+                      color: NeoColors.primary,
+                      borderRadius: BorderRadius.vertical(top: Radius.circular(13)),
+                      border: Border(bottom: BorderSide(color: NeoColors.ink, width: 3)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'MASUKKAN SOAL KE UJIAN',
+                            style: TextStyle(
+                              fontFamily: 'Space Grotesk',
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                              color: NeoColors.ink,
+                            ),
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () => Navigator.of(dialogCtx).pop(),
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: NeoColors.surface,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: NeoColors.ink, width: 2),
+                            ),
+                            child: const Icon(Icons.close, size: 16, color: NeoColors.ink),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: NeoColors.tertiary,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: NeoColors.ink, width: 2),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.check_box_outlined, color: NeoColors.ink, size: 20),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  '${questionIds.length} butir soal dipilih untuk dialokasikan.',
+                                  style: const TextStyle(
+                                    fontFamily: 'Hanken Grotesk',
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13,
+                                    color: NeoColors.ink,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'PILIH UJIAN TUJUAN',
+                          style: TextStyle(
+                            fontFamily: 'Space Grotesk',
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13,
+                            color: NeoColors.ink,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            color: NeoColors.surface,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: NeoColors.ink, width: 2),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              isExpanded: true,
+                              value: selectedExamId,
+                              items: exams.map((ex) {
+                                return DropdownMenuItem<String>(
+                                  value: ex.id,
+                                  child: Text(
+                                    ex.title,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontFamily: 'Hanken Grotesk',
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 14,
+                                      color: NeoColors.ink,
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setDialogState(() => selectedExamId = val);
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: const BoxDecoration(
+                      color: NeoColors.bg,
+                      borderRadius: BorderRadius.vertical(bottom: Radius.circular(13)),
+                      border: Border(top: BorderSide(color: NeoColors.ink, width: 3)),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: NeoButton(
+                            text: 'ALOKASIKAN KE UJIAN',
+                            variant: NeoButtonVariant.primary,
+                            onPressed: () async {
+                              Navigator.of(dialogCtx).pop();
+                              final success = await examProv.assignQuestions(selectedExamId, questionIds);
+                              if (!mounted) return;
+                              if (success) {
+                                setState(() {
+                                  _selectedBankQuestionIds.clear();
+                                });
+                                final targetExam = exams.firstWhere((e) => e.id == selectedExamId);
+                                NeoSnackbar.showSuccess(
+                                  context,
+                                  title: 'BERHASIL DIALOKASIKAN',
+                                  message: '${questionIds.length} butir soal berhasil dimasukkan ke "${targetExam.title}".',
+                                );
+                                await examProv.loadExams();
+                              } else {
+                                NeoSnackbar.showError(
+                                  context,
+                                  title: 'GAGAL MENAMBAHKAN',
+                                  message: examProv.errorMessage ?? 'Gagal menambahkan soal ke ujian',
+                                );
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
         },
       ),
     );
@@ -873,18 +1170,117 @@ class _ExamsScreenState extends State<ExamsScreen> {
                       ),
           ),
         ),
+        if (_selectedBankQuestionIds.isNotEmpty)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: const BoxDecoration(
+              color: NeoColors.surface,
+              border: Border(top: BorderSide(color: NeoColors.ink, width: 3)),
+              boxShadow: [
+                BoxShadow(
+                  color: NeoColors.ink,
+                  offset: Offset(0, -4),
+                  blurRadius: 0,
+                ),
+              ],
+            ),
+            child: SafeArea(
+              top: false,
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: NeoColors.tertiary,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: NeoColors.ink, width: 2),
+                    ),
+                    child: Text(
+                      '${_selectedBankQuestionIds.length} Dipilih',
+                      style: const TextStyle(
+                        fontFamily: 'Space Grotesk',
+                        fontWeight: FontWeight.w800,
+                        fontSize: 12,
+                        color: NeoColors.ink,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () => setState(() => _selectedBankQuestionIds.clear()),
+                    child: const Text(
+                      'Batal',
+                      style: TextStyle(
+                        fontFamily: 'Space Grotesk',
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                        color: NeoColors.danger,
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: NeoColors.secondary,
+                      foregroundColor: NeoColors.ink,
+                      elevation: 0,
+                      side: const BorderSide(color: NeoColors.ink, width: 2),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    ),
+                    onPressed: () => _showCreateExamDialog(
+                      initialSelectedQuestionIds: _selectedBankQuestionIds.toList(),
+                    ),
+                    child: const Text(
+                      'BUAT UJIAN BARU',
+                      style: TextStyle(
+                        fontFamily: 'Space Grotesk',
+                        fontWeight: FontWeight.w800,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: NeoColors.primary,
+                      foregroundColor: NeoColors.ink,
+                      elevation: 0,
+                      side: const BorderSide(color: NeoColors.ink, width: 2),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    ),
+                    onPressed: () => _showSelectExamDialog(_selectedBankQuestionIds.toList()),
+                    child: const Text(
+                      'MASUKKAN KE UJIAN',
+                      style: TextStyle(
+                        fontFamily: 'Space Grotesk',
+                        fontWeight: FontWeight.w800,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
       ],
     );
   }
 
   Widget _buildQuestionCard(QuestionModel q, int number) {
     final isMcq = q.type == 'mcq';
+    final isSelected = _selectedBankQuestionIds.contains(q.id);
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: NeoColors.surface,
+        color: isSelected ? NeoColors.primary.withValues(alpha: 0.15) : NeoColors.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: NeoColors.ink, width: 2.5),
+        border: Border.all(
+          color: isSelected ? NeoColors.ink : NeoColors.ink,
+          width: isSelected ? 3 : 2.5,
+        ),
         boxShadow: const [
           BoxShadow(
             color: NeoColors.ink,
@@ -898,6 +1294,25 @@ class _ExamsScreenState extends State<ExamsScreen> {
         children: [
           Row(
             children: [
+              SizedBox(
+                width: 28,
+                height: 28,
+                child: Checkbox(
+                  value: isSelected,
+                  activeColor: NeoColors.primary,
+                  checkColor: NeoColors.ink,
+                  onChanged: (val) {
+                    setState(() {
+                      if (val == true) {
+                        _selectedBankQuestionIds.add(q.id);
+                      } else {
+                        _selectedBankQuestionIds.remove(q.id);
+                      }
+                    });
+                  },
+                ),
+              ),
+              const SizedBox(width: 6),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
@@ -935,6 +1350,34 @@ class _ExamsScreenState extends State<ExamsScreen> {
                     fontWeight: FontWeight.w700,
                     fontSize: 11,
                     color: NeoColors.ink,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: () => _showSelectExamDialog([q.id]),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: NeoColors.tertiary,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: NeoColors.ink, width: 1.5),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.add, size: 12, color: NeoColors.ink),
+                      SizedBox(width: 2),
+                      Text(
+                        'KE UJIAN',
+                        style: TextStyle(
+                          fontFamily: 'Space Grotesk',
+                          fontWeight: FontWeight.w800,
+                          fontSize: 10,
+                          color: NeoColors.ink,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),

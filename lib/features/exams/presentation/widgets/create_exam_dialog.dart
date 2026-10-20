@@ -8,11 +8,13 @@ import '../../data/models/course_model.dart';
 class CreateExamDialog extends StatefulWidget {
   final List<CourseModel> courses;
   final Future<bool> Function(Map<String, dynamic> data) onSubmit;
+  final List<String>? initialSelectedQuestionIds;
 
   const CreateExamDialog({
     super.key,
     required this.courses,
     required this.onSubmit,
+    this.initialSelectedQuestionIds,
   });
 
   @override
@@ -29,6 +31,8 @@ class _CreateExamDialogState extends State<CreateExamDialog> {
   final _lngController = TextEditingController(text: '106.827153');
   final _radiusController = TextEditingController(text: '150');
 
+  late List<String> _selectedQuestionIds;
+
   String? _selectedCourseId;
   DateTime _startAt = DateTime.now().add(const Duration(hours: 1));
   DateTime _endAt = DateTime.now().add(const Duration(hours: 3));
@@ -41,6 +45,7 @@ class _CreateExamDialogState extends State<CreateExamDialog> {
   @override
   void initState() {
     super.initState();
+    _selectedQuestionIds = List.from(widget.initialSelectedQuestionIds ?? []);
     if (widget.courses.isNotEmpty) {
       _selectedCourseId = widget.courses.first.id;
     }
@@ -125,6 +130,7 @@ class _CreateExamDialogState extends State<CreateExamDialog> {
       'venue_lng': _requireGeofence ? double.tryParse(_lngController.text) ?? 106.827153 : null,
       'venue_radius_m': _requireGeofence ? int.tryParse(_radiusController.text) ?? 150 : null,
       'status': _isPublished ? 'published' : 'draft',
+      if (_selectedQuestionIds.isNotEmpty) 'question_ids': _selectedQuestionIds,
     };
 
     final success = await widget.onSubmit(payload);
@@ -227,6 +233,42 @@ class _CreateExamDialogState extends State<CreateExamDialog> {
                                     color: NeoColors.danger,
                                     fontWeight: FontWeight.w700,
                                     fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+
+                      if (_selectedQuestionIds.isNotEmpty) ...[
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          margin: const EdgeInsets.only(bottom: 14),
+                          decoration: BoxDecoration(
+                            color: NeoColors.tertiary,
+                            border: Border.all(color: NeoColors.ink, width: 2.5),
+                            borderRadius: BorderRadius.circular(8),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: NeoColors.ink,
+                                offset: Offset(3, 3),
+                                blurRadius: 0,
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.check_circle, color: NeoColors.ink, size: 22),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  '${_selectedQuestionIds.length} butir soal dari Bank Soal akan otomatis dimasukkan ke dalam ujian ini.',
+                                  style: const TextStyle(
+                                    fontFamily: 'Hanken Grotesk',
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13,
+                                    color: NeoColors.ink,
                                   ),
                                 ),
                               ),

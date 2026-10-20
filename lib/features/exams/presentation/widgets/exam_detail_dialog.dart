@@ -17,6 +17,7 @@ class ExamDetailDialog extends StatelessWidget {
   final VoidCallback? onMonitor;
   final VoidCallback? onViewLocation;
   final VoidCallback? onReviewEssay;
+  final VoidCallback? onDeleteExam;
 
   const ExamDetailDialog({
     super.key,
@@ -30,6 +31,7 @@ class ExamDetailDialog extends StatelessWidget {
     this.onMonitor,
     this.onViewLocation,
     this.onReviewEssay,
+    this.onDeleteExam,
   });
 
   String _formatDateTime(DateTime dt) {
@@ -262,21 +264,61 @@ class ExamDetailDialog extends StatelessWidget {
 
                     if (questions.isEmpty)
                       Container(
-                        padding: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          color: NeoColors.muted.withValues(alpha: 0.3),
+                          color: NeoColors.tertiary.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: NeoColors.ink, width: 1.5),
+                          border: Border.all(color: NeoColors.ink, width: 2),
                         ),
-                        child: const Center(
-                          child: Text(
-                            'Belum ada soal yang dialokasikan ke ujian ini.',
-                            style: TextStyle(
-                              fontFamily: 'Hanken Grotesk',
-                              fontSize: 13,
-                              color: NeoColors.ink,
+                        child: Column(
+                          children: [
+                            const Text(
+                              'Belum ada butir soal pada ujian ini.',
+                              style: TextStyle(
+                                fontFamily: 'Hanken Grotesk',
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                                color: NeoColors.ink,
+                              ),
                             ),
-                          ),
+                            if (isLecturer && onAddQuestions != null) ...[
+                              const SizedBox(height: 10),
+                              GestureDetector(
+                                onTap: onAddQuestions,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: NeoColors.primary,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: NeoColors.ink, width: 2),
+                                    boxShadow: const [
+                                      BoxShadow(
+                                        color: NeoColors.ink,
+                                        offset: Offset(2, 2),
+                                        blurRadius: 0,
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.add_task, size: 16, color: NeoColors.ink),
+                                      SizedBox(width: 6),
+                                      Text(
+                                        'AMBIL DARI BANK SOAL',
+                                        style: TextStyle(
+                                          fontFamily: 'Space Grotesk',
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 12,
+                                          color: NeoColors.ink,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       )
                     else
@@ -417,6 +459,19 @@ class ExamDetailDialog extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 8),
+                    if (onDeleteExam != null) ...[
+                      IconButton(
+                        style: IconButton.styleFrom(
+                          backgroundColor: NeoColors.danger.withValues(alpha: 0.15),
+                          side: const BorderSide(color: NeoColors.danger, width: 2),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        icon: const Icon(Icons.delete_outline, color: NeoColors.danger),
+                        tooltip: 'Hapus Ujian',
+                        onPressed: onDeleteExam,
+                      ),
+                      const SizedBox(width: 8),
+                    ],
                     IconButton(
                       style: IconButton.styleFrom(
                         backgroundColor: NeoColors.surface,
