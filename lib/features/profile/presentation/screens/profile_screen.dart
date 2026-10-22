@@ -11,6 +11,8 @@ import '../../../../core/widgets/neo_card.dart';
 import '../../../../core/widgets/neo_button.dart';
 import '../../../../core/widgets/neo_dialog.dart';
 import '../../../../core/widgets/neo_text_field.dart';
+import '../../../../core/widgets/neo_snackbar.dart';
+import '../../../../core/services/notification_service.dart';
 import '../../../../features/auth/presentation/providers/auth_provider.dart';
 import '../../../../features/auth/presentation/screens/login_screen.dart';
 
@@ -698,6 +700,76 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     value: _notificationsEnabled,
                     onChanged: (val) => setState(() => _notificationsEnabled = val),
                   ),
+                  if (_notificationsEnabled) ...[
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                backgroundColor: NeoColors.surface,
+                                side: const BorderSide(color: NeoColors.ink, width: 2),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                              ),
+                              icon: const Icon(Icons.notifications_active_outlined, size: 16, color: NeoColors.ink),
+                              label: const Text(
+                                'UJI NOTIFIKASI',
+                                style: TextStyle(
+                                  fontFamily: 'Space Grotesk',
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 11,
+                                  color: NeoColors.ink,
+                                ),
+                              ),
+                              onPressed: () async {
+                                await NotificationService.instance.showTestNotification();
+                                if (context.mounted) {
+                                  NeoSnackbar.showSuccess(
+                                    context,
+                                    title: 'NOTIFIKASI TERKIRIM',
+                                    message: 'Periksa status bar perangkat untuk melihat notifikasi uji.',
+                                  );
+                                }
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                backgroundColor: NeoColors.tertiary,
+                                side: const BorderSide(color: NeoColors.ink, width: 2),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                              ),
+                              icon: const Icon(Icons.alarm_on_outlined, size: 16, color: NeoColors.ink),
+                              label: const Text(
+                                'UJI ALARM (5 DETIK)',
+                                style: TextStyle(
+                                  fontFamily: 'Space Grotesk',
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 11,
+                                  color: NeoColors.ink,
+                                ),
+                              ),
+                              onPressed: () async {
+                                await NotificationService.instance.scheduleQuickTestNotification(delaySeconds: 5);
+                                if (context.mounted) {
+                                  NeoSnackbar.showInfo(
+                                    context,
+                                    title: 'PENGINGAT DIJADWALKAN',
+                                    message: 'Alarm notifikasi akan berdering dalam 5 detik.',
+                                  );
+                                }
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const Divider(color: NeoColors.ink, thickness: 1.5),
                   ListTile(
                     leading: const Icon(Icons.lock_reset, color: NeoColors.ink),

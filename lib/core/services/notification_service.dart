@@ -133,6 +133,59 @@ class NotificationService {
     }
   }
 
+  /// Send an immediate test notification for checking system functionality
+  Future<void> showTestNotification() async {
+    if (!_initialized || kIsWeb) return;
+
+    try {
+      await _plugin.show(
+        id: 99999,
+        title: 'SafeExam: Notifikasi Aktif',
+        body: 'Notifikasi sistem SafeExam aktif dan berfungsi dengan sempurna!',
+        notificationDetails: const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'exam_tests',
+            'Uji Notifikasi',
+            channelDescription: 'Saluran pengujian sistem notifikasi SafeExam',
+            importance: Importance.max,
+            priority: Priority.high,
+          ),
+          iOS: DarwinNotificationDetails(),
+        ),
+      );
+    } catch (e) {
+      debugPrint('[NotificationService] Error showing test notification: $e');
+    }
+  }
+
+  /// Schedule a quick test notification 5 seconds from now to test zonedSchedule
+  Future<void> scheduleQuickTestNotification({int delaySeconds = 5}) async {
+    if (!_initialized || kIsWeb) return;
+
+    try {
+      final scheduledTime = tz.TZDateTime.now(tz.local).add(Duration(seconds: delaySeconds));
+      await _plugin.zonedSchedule(
+        id: 99998,
+        title: 'Pengingat Terjadwal (Uji $delaySeconds Detik)',
+        body: 'Pengingat terjadwal SafeExam (F15) berhasil dipicu tepat waktu!',
+        scheduledDate: scheduledTime,
+        notificationDetails: const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'exam_reminders',
+            'Pengingat Ujian',
+            channelDescription: 'Notifikasi jadwal dan pengingat ujian SafeExam',
+            importance: Importance.max,
+            priority: Priority.high,
+          ),
+          iOS: DarwinNotificationDetails(),
+        ),
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      );
+    } catch (e) {
+      debugPrint('[NotificationService] Error scheduling quick test: $e');
+    }
+  }
+
   /// Cancel all reminders for an exam
   Future<void> cancelExamReminders(String examId) async {
     if (!_initialized || kIsWeb) return;
