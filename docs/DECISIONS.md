@@ -1,5 +1,36 @@
 # Log Keputusan Teknis — SafeExam
 
+## 2026-10-22: F07 — Perbaikan Red Screen of Death pada Halaman Review Essay / UTS Dosen
+
+### Masalah yang Ditemukan
+1. **Type Cast Error pada Kolom Desimal PostgreSQL**:
+   - Kolom `questions.max_score`, `essay_grades.ai_score`, `essay_grades.teacher_score`, dan `essay_grades.final_score` di database PostgreSQL bertipe `numeric`/`decimal`.
+   - Driver Node-Postgres (`pg`) secara default mengembalikan nilai `numeric` sebagai `String` (misal `"10.00"`, `"1.50"`) untuk menjaga presisi matematis tanpa rounding error floating point.
+   - Pada `lib/features/exams/presentation/screens/essay_review_screen.dart:288`, kode memanggil:
+     `final maxScore = (r['max_score'] as num?)?.toDouble() ?? 50.0;`
+   - Karena `r['max_score']` bertipe `String`, evaluasi cast `("10.00" as num?)` melempar uncaught `TypeError: type 'String' is not a subtype of type 'num?' in type cast` saat Flutter merender widget tree, yang memicu **Red Screen of Death** di aplikasi.
+2. **Potensi Kesalahan Parsing JSON pada Flags & AI Breakdown**:
+   - Kolom `flags` dan `ai_json` dapat berupa JSON string atau List/Map dinamis tergantung serialisasi Knex. Pemanggilan `.cast<String>()` atau `as Map<String, dynamic>?` langsung rentan terhadap type mismatch jika format berubah.
+3. **Siklus Hidup Controller**:
+   - Controller skor dan komentar belum dibersihkan saat refresh daftar review, dan berisiko membuat instance baru setiap frame jika key tidak ditemukan.
+
+### Keputusan & Solusi
+1. **Konversi Tipe Data pada Endpoint Backend (`server/src/routes/reviews.ts`)**:
+   - Mengonversi `max_score`, `ai_score`, `teacher_score`, dan `final_score` secara eksplisit menjadi `Number` sebelum dikembalikan ke klien, serta memastikan `flags` dan `ai_json` selalu diparse menjadi object/array JSON valid.
+2. **Defensive Parsing pada Flutter (`EssayReviewScreen`)**:
+   - Menggunakan `double.tryParse(r['max_score']?.toString() ?? '') ?? 50.0` yang aman baik menerima `int`, `double`, `String`, maupun `null`.
+   - Memasukkan fallback parsing untuk `flags` (aman untuk `List` dan string JSON) dan `ai_json` (aman untuk `Map` dan string JSON).
+   - Memperbaiki pemetaan rincian rubrik dengan `.whereType<Map>()` dan `.toString()` untuk atribut poin dan kriteria.
+   - Menggunakan `_scoreControllers.putIfAbsent(...)` dan `_commentControllers.putIfAbsent(...)` agar controller selalu terikat secara konsisten.
+   - Menjamin pelepasan memori dengan mendispose controller lama sebelum memuat daftar review baru.
+3. **Penyempurnaan Modul Serupa**:
+   - Mengamankan parsing `criticalCount` dan `violations` pada `exam_monitor_screen.dart`.
+   - Mengamankan parsing koordinat geofence (`venue_lat`, `venue_lng`, `venue_radius_m`) pada `exam_runner_provider.dart`.
+   - Mengamankan parsing response `fetchExamDetail`, `finalizeEssayGrade`, dan `createQuestionsBatch` pada `exam_repository.dart`.
+4. **Validasi**:
+   - Menambahkan unit test di `test/unit/essay_review_test.dart` (45/45 test Flutter lulus, 0 error pada `flutter analyze`).
+   - Seluruh 76 test backend di Vitest tetap lulus 100%.
+
 ## 2026-10-19: F03 & Ekstraksi AI — Tampilan Bank Soal Dosen, Perbaikan Pembuatan Ujian & Penanganan Overflow UI
 
 ### Masalah yang Ditemukan
