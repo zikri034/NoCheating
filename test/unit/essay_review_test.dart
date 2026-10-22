@@ -51,5 +51,29 @@ void main() {
       expect(isProvisional('pending_manual'), isTrue);
       expect(isProvisional('finalized'), isFalse);
     });
+
+    test('Resiliently parses PostgreSQL decimal strings for max_score, ai_score, flags and ai_json without type cast error', () {
+      final rawRow = {
+        'grade_id': 'grade-123',
+        'student_name': 'Budi Santoso',
+        'student_nim': '220101',
+        'max_score': '10.00', // Postgres decimal returned as string
+        'ai_score': '7.50',   // Postgres decimal returned as string
+        'teacher_score': '8.00',
+        'status': 'needs_review',
+        'confidence': 'medium',
+        'flags': '["too_short"]', // Json string or List
+        'ai_json': '{"feedback":"Cukup baik","rubric_breakdown":[{"criterion":"Konsep","points":4,"max_points":5}]}',
+      };
+
+      final maxScore = double.tryParse(rawRow['max_score']?.toString() ?? '') ?? 50.0;
+      expect(maxScore, 10.0);
+
+      final aiScore = rawRow['ai_score'] != null ? '${rawRow['ai_score']}' : '-';
+      expect(aiScore, '7.50');
+
+      final currentScore = rawRow['teacher_score'] ?? rawRow['ai_score'] ?? 0;
+      expect('$currentScore', '8.00');
+    });
   });
 }

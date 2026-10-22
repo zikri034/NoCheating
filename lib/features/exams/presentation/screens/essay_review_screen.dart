@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../../../../core/theme/neo_theme.dart';
 import '../../../../core/widgets/neo_card.dart';
@@ -62,9 +63,20 @@ class _EssayReviewScreenState extends State<EssayReviewScreen> {
         examId: widget.examId,
       );
 
+      // Clean up previous controllers to prevent memory leaks
+      for (final c in _scoreControllers.values) {
+        c.dispose();
+      }
+      for (final c in _commentControllers.values) {
+        c.dispose();
+      }
+      _scoreControllers.clear();
+      _commentControllers.clear();
+
       // Initialize controllers for each review item
       for (final r in data) {
         final gradeId = r['grade_id']?.toString() ?? '';
+        if (gradeId.isEmpty) continue;
         final currentScore = r['teacher_score'] ?? r['ai_score'] ?? 0;
         final currentComment = r['teacher_comment']?.toString() ?? '';
 
@@ -273,12 +285,34 @@ class _EssayReviewScreenState extends State<EssayReviewScreen> {
     final studentName = r['student_name'] ?? 'Mahasiswa';
     final studentNim = r['student_nim'] ?? '-';
     final courseName = r['course_name'] ?? '';
-    final maxScore = (r['max_score'] as num?)?.toDouble() ?? 50.0;
+    final maxScore = double.tryParse(r['max_score']?.toString() ?? '') ?? 50.0;
     final aiScore = r['ai_score'] != null ? '${r['ai_score']}' : '-';
     final status = r['status']?.toString() ?? 'pending';
     final confidence = r['confidence']?.toString() ?? 'medium';
-    final flags = (r['flags'] as List?)?.cast<String>() ?? [];
-    final aiBreakdown = r['ai_json'] as Map<String, dynamic>?;
+
+    List<String> flags = [];
+    if (r['flags'] is List) {
+      flags = (r['flags'] as List).map((f) => f.toString()).toList();
+    } else if (r['flags'] is String && (r['flags'] as String).isNotEmpty) {
+      try {
+        final parsed = jsonDecode(r['flags'] as String);
+        if (parsed is List) {
+          flags = parsed.map((f) => f.toString()).toList();
+        }
+      } catch (_) {}
+    }
+
+    Map<String, dynamic>? aiBreakdown;
+    if (r['ai_json'] is Map) {
+      aiBreakdown = Map<String, dynamic>.from(r['ai_json'] as Map);
+    } else if (r['ai_json'] is String && (r['ai_json'] as String).isNotEmpty) {
+      try {
+        final parsed = jsonDecode(r['ai_json'] as String);
+        if (parsed is Map) {
+          aiBreakdown = Map<String, dynamic>.from(parsed);
+        }
+      } catch (_) {}
+    }
 
     final isFinalizing = _finalizingIds.contains(gradeId);
 
@@ -478,11 +512,11 @@ class _EssayReviewScreenState extends State<EssayReviewScreen> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    ...((aiBreakdown['rubric_breakdown'] as List).map((item) {
-                      final crit = item['criterion'] ?? '';
-                      final pts = item['points'] ?? 0;
-                      final maxPts = item['max_points'] ?? 0;
-                      final com = item['comment'] ?? '';
+                    ...((aiBreakdown['rubric_breakdown'] as List).whereType<Map>().map((item) {
+                      final crit = item['criterion']?.toString() ?? '';
+                      final pts = item['points']?.toString() ?? '0';
+                      final maxPts = item['max_points']?.toString() ?? '0';
+                      final com = item['comment']?.toString() ?? '';
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 4),
                         child: Text(
@@ -530,7 +564,14 @@ class _EssayReviewScreenState extends State<EssayReviewScreen> {
                 flex: 2,
                 child: NeoTextField(
                   label: 'NILAI FINAL (MAKS $maxScore)',
-                  controller: _scoreControllers[gradeId] ?? TextEditingController(),
+                  controller: _scoreControllers.putIfAbsent(
+                    gradeId,
+                    () => TextEditingController(
+                      text: r['teacher_score'] != null
+                          ? '${r['teacher_score']}'
+                          : (r['ai_score'] != null ? '${r['ai_score']}' : '0'),
+                    ),
+                  ),
                   keyboardType: TextInputType.number,
                 ),
               ),
@@ -539,7 +580,12 @@ class _EssayReviewScreenState extends State<EssayReviewScreen> {
                 flex: 3,
                 child: NeoTextField(
                   label: 'CATATAN DOSEN',
-                  controller: _commentControllers[gradeId] ?? TextEditingController(),
+                  controller: _commentControllers.putIfAbsent(
+                    gradeId,
+                    () => TextEditingController(
+                      text: r['teacher_comment']?.toString() ?? '',
+                    ),
+                  ),
                 ),
               ),
             ],

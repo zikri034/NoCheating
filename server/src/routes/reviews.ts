@@ -63,10 +63,14 @@ router.get('/', jwtMiddleware, requireRole('lecturer'), async (req: Request, res
 
     const reviews = await query;
 
-    // Parse jsonb fields if needed
+    // Parse jsonb fields and numeric types
     const mapped = reviews.map((r) => ({
       ...r,
-      flags: typeof r.flags === 'string' ? JSON.parse(r.flags) : r.flags,
+      max_score: r.max_score != null ? Number(r.max_score) : 0,
+      ai_score: r.ai_score != null ? Number(r.ai_score) : null,
+      teacher_score: r.teacher_score != null ? Number(r.teacher_score) : null,
+      final_score: r.final_score != null ? Number(r.final_score) : null,
+      flags: typeof r.flags === 'string' ? JSON.parse(r.flags) : (r.flags || []),
       ai_json: typeof r.ai_json === 'string' ? JSON.parse(r.ai_json) : r.ai_json,
     }));
 

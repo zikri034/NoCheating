@@ -166,7 +166,7 @@ class ExamRunnerProvider extends ChangeNotifier {
       _examMeta = data['exam'] as Map<String, dynamic>?;
       _questions = data['questions'] as List<QuestionModel>;
 
-      _maxCritical = (_examMeta?['max_critical'] as num?)?.toInt() ?? 3;
+      _maxCritical = int.tryParse(_examMeta?['max_critical']?.toString() ?? '') ?? 3;
       _criticalCount = _attempt!.criticalCount;
 
       // Load existing answers from server & local cache
@@ -454,9 +454,9 @@ class ExamRunnerProvider extends ChangeNotifier {
       if (_isSubmitted || _isTerminated || _examMeta == null) return;
       if (_examMeta!['venue_lat'] == null || _examMeta!['venue_lng'] == null) return;
 
-      final lat = (_examMeta!['venue_lat'] as num).toDouble();
-      final lng = (_examMeta!['venue_lng'] as num).toDouble();
-      final radius = (_examMeta!['venue_radius_m'] as num?)?.toDouble() ?? 100.0;
+      final lat = double.tryParse('${_examMeta!['venue_lat']}') ?? 0.0;
+      final lng = double.tryParse('${_examMeta!['venue_lng']}') ?? 0.0;
+      final radius = double.tryParse('${_examMeta!['venue_radius_m']}') ?? 100.0;
 
       final status = await _geofenceService.checkGeofence(
         venueLat: lat,

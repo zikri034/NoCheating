@@ -278,8 +278,13 @@ class _ExamMonitorScreenState extends State<ExamMonitorScreen> {
 
   Widget _buildParticipantCard(Map<String, dynamic> p, int maxCritical) {
     final status = p['status'] as String? ?? 'in_progress';
-    final criticalCount = (p['critical_count'] as num?)?.toInt() ?? 0;
-    final violations = (p['violations'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final criticalCount = int.tryParse(p['critical_count']?.toString() ?? '') ?? 0;
+    final violations = (p['violations'] is List)
+        ? (p['violations'] as List)
+            .whereType<Map>()
+            .map((v) => Map<String, dynamic>.from(v))
+            .toList()
+        : <Map<String, dynamic>>[];
 
     NeoTagVariant statusVariant;
     String statusLabel;

@@ -39,10 +39,10 @@ class ExamRepository {
   Future<Map<String, dynamic>> fetchExamDetail(String id) async {
     try {
       final response = await _dio.get('/exams/$id');
-      final exam = ExamModel.fromJson(response.data['exam'] as Map<String, dynamic>);
+      final exam = ExamModel.fromJson(Map<String, dynamic>.from(response.data['exam'] as Map));
       final List qList = response.data['questions'] as List? ?? [];
-      final questions = qList.map((q) => QuestionModel.fromJson(q as Map<String, dynamic>)).toList();
-      final count = (response.data['enrollment_count'] as num?)?.toInt() ?? 0;
+      final questions = qList.map((q) => QuestionModel.fromJson(Map<String, dynamic>.from(q as Map))).toList();
+      final count = int.tryParse(response.data['enrollment_count']?.toString() ?? '') ?? 0;
 
       return {
         'exam': exam,
@@ -157,7 +157,7 @@ class ExamRepository {
 
       final response = await _dio.get('/reviews', queryParameters: queryParams);
       final List list = response.data['reviews'] as List? ?? [];
-      return list.cast<Map<String, dynamic>>();
+      return list.map((item) => Map<String, dynamic>.from(item as Map)).toList();
     } on DioException catch (e) {
       final msg = e.response?.data?['error']?['message'] ?? e.message ?? 'Gagal memuat review essay';
       throw Exception(msg);
@@ -177,7 +177,7 @@ class ExamRepository {
         'teacher_comment': teacherComment,
         'finalize': finalize,
       });
-      return response.data as Map<String, dynamic>;
+      return Map<String, dynamic>.from(response.data as Map);
     } on DioException catch (e) {
       final msg = e.response?.data?['error']?['message'] ?? e.message ?? 'Gagal memfinalisasi nilai essay';
       throw Exception(msg);
@@ -227,7 +227,7 @@ class ExamRepository {
         },
       );
       final List list = response.data['questions'] as List? ?? [];
-      return list.map((q) => QuestionModel.fromJson(q as Map<String, dynamic>)).toList();
+      return list.map((q) => QuestionModel.fromJson(Map<String, dynamic>.from(q as Map))).toList();
     } on DioException catch (e) {
       final msg = e.response?.data?['error']?['message'] ?? e.message ?? 'Gagal menyimpan batch soal';
       throw Exception(msg);
