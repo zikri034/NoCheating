@@ -162,13 +162,17 @@ class ExamCard extends StatelessWidget {
                         const Spacer(),
                         const Icon(Icons.person_outline, size: 16, color: NeoColors.ink),
                         const SizedBox(width: 4),
-                        Text(
-                          exam.lecturerName!,
-                          style: const TextStyle(
-                            fontFamily: 'Hanken Grotesk',
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: NeoColors.ink,
+                        Flexible(
+                          child: Text(
+                            exam.lecturerName!,
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                            style: const TextStyle(
+                              fontFamily: 'Hanken Grotesk',
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: NeoColors.ink,
+                            ),
                           ),
                         ),
                       ],
@@ -264,6 +268,8 @@ class ExamCard extends StatelessWidget {
                   Expanded(
                     child: NeoButton(
                       text: 'KELOLA',
+                      fontSize: 13,
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
                       variant: NeoButtonVariant.secondary,
                       onPressed: onTap,
                     ),
@@ -272,6 +278,8 @@ class ExamCard extends StatelessWidget {
                   Expanded(
                     child: NeoButton(
                       text: 'MONITOR',
+                      fontSize: 13,
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
                       variant: NeoButtonVariant.primary,
                       onPressed: onMonitor ?? onTap,
                     ),

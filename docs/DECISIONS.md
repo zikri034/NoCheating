@@ -1,5 +1,33 @@
 # Log Keputusan Teknis — SafeExam
 
+## 2026-10-22: F03 — Perbaikan Overflow Baris Selesai & Penataan Tombol Monitor dan Review AI pada Kelola Ujian
+
+### Masalah yang Ditemukan
+1. **RenderFlex Overflow pada Baris Waktu Selesai (`_buildInfoRow`)**:
+   - Pada `ExamDetailDialog`, baris 'Selesai' menggunakan `Row` dengan `Spacer()` dan `Text(value)` berformat panjang (`dd MMMM yyyy, HH:mm WIB` dengan font `Space Mono`). Pada resolusi layar ponsel (360-390px lebar), panjang teks monospaced melebihi sisa ruang kontainer sehingga memicu overflow kanan (RenderFlex overflowed).
+2. **Tombol "MONITOR" dan "REVIEW AI" Terlalu Sempit & Teks Bertumpuk**:
+   - Di baris aksi bawah `ExamDetailDialog`, terdapat 4 elemen: `NeoButton` MONITOR (Expanded), `NeoButton` REVIEW AI (Expanded), `IconButton` Hapus Ujian (48px), dan `IconButton` Tutup (48px).
+   - `NeoButton` secara default memiliki horizontal padding 24px kiri-kanan dan font size 16px.
+   - Ruang tersisa untuk teks di dalam tombol hanya sekitar 26-35px, menyebabkan teks "MONITOR" dan "REVIEW AI" terpaksa wrap menjadi beberapa baris, menabrak border, dan bertumpukan (*tumpang tindih*).
+
+### Keputusan & Solusi
+1. **Perbaikan Baris Informasi (`_buildInfoRow`)**:
+   - Mengganti `Spacer() + Text` dengan `Expanded(child: Text(value, textAlign: TextAlign.end, ...))` dan `crossAxisAlignment: CrossAxisAlignment.start`.
+   - Menyingkat format tanggal menjadi `dd MMM yyyy, HH:mm` (contoh: "22 Okt 2026, 23:59 WIB") agar ringkas, rapi, dan adaptif.
+2. **Penambahan Fleksibilitas pada `NeoButton`**:
+   - Menambahkan parameter opsional `padding`, `fontSize`, dan `icon` pada `NeoButton`.
+   - Membatasi teks tombol dengan `maxLines: 1` dan `overflow: TextOverflow.ellipsis` agar tidak pernah keluar dari kontainer atau tumpang tindih.
+3. **Redesain Baris Aksi Kelola Ujian (`ExamDetailDialog`)**:
+   - Menjadikan tombol `MONITOR` dan `REVIEW AI` mengambil lebar penuh secara seimbang (masing-masing 50% lebar dialog).
+   - Menambahkan ikon visual `Icons.visibility_outlined` untuk MONITOR dan `Icons.auto_awesome` untuk REVIEW AI dengan font size 13px dan padding proporsional (10px horizontal, 12px vertikal).
+   - Memindahkan aksi hapus ujian ke tombol lingkaran di header dialog (berdampingan dengan tombol X tutup), serta menjaga dialog tetap bersih, lapang, dan bergaya Neo-Brutalism.
+4. **Pencegahan Overflow pada Komponen Terkait**:
+   - Menjadikan `exam.lecturerName` pada `ExamCard` fleksibel dengan `Flexible` dan ellipsis.
+   - Menjadikan label `Waktu Mulai:` dan `Waktu Selesai:` pada `CreateExamDialog` aman dengan `Flexible`.
+5. **Validasi**:
+   - `flutter analyze`: 0 issues found.
+   - `flutter test`: 45/45 test passed.
+
 ## 2026-10-22: F07 — Perbaikan Red Screen of Death pada Halaman Review Essay / UTS Dosen
 
 ### Masalah yang Ditemukan

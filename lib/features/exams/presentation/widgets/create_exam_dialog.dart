@@ -418,12 +418,14 @@ class _CreateExamDialogState extends State<CreateExamDialog> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text(
-                                  'Waktu Mulai:',
-                                  style: TextStyle(
-                                    fontFamily: 'Hanken Grotesk',
-                                    fontWeight: FontWeight.w700,
-                                    color: NeoColors.ink,
+                                const Flexible(
+                                  child: Text(
+                                    'Waktu Mulai:',
+                                    style: TextStyle(
+                                      fontFamily: 'Hanken Grotesk',
+                                      fontWeight: FontWeight.w700,
+                                      color: NeoColors.ink,
+                                    ),
                                   ),
                                 ),
                                 TextButton.icon(
@@ -444,12 +446,14 @@ class _CreateExamDialogState extends State<CreateExamDialog> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text(
-                                  'Waktu Selesai:',
-                                  style: TextStyle(
-                                    fontFamily: 'Hanken Grotesk',
-                                    fontWeight: FontWeight.w700,
-                                    color: NeoColors.ink,
+                                const Flexible(
+                                  child: Text(
+                                    'Waktu Selesai:',
+                                    style: TextStyle(
+                                      fontFamily: 'Hanken Grotesk',
+                                      fontWeight: FontWeight.w700,
+                                      color: NeoColors.ink,
+                                    ),
                                   ),
                                 ),
                                 TextButton.icon(

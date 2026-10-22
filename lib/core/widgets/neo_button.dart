@@ -10,6 +10,9 @@ class NeoButton extends StatefulWidget {
   final double borderRadius;
   final Color? backgroundColor;
   final Color? textColor;
+  final EdgeInsetsGeometry? padding;
+  final double? fontSize;
+  final Widget? icon;
 
   const NeoButton({
     super.key,
@@ -19,6 +22,9 @@ class NeoButton extends StatefulWidget {
     this.borderRadius = 12.0,
     this.backgroundColor,
     this.textColor,
+    this.padding,
+    this.fontSize,
+    this.icon,
   });
 
   @override
@@ -51,7 +57,7 @@ class _NeoButtonState extends State<NeoButton> {
       onTap: widget.onPressed,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 100),
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        padding: widget.padding ?? const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
         decoration: BoxDecoration(
           color: _isPressed ? _getBackgroundColor().withValues(alpha: 0.8) : _getBackgroundColor(),
           borderRadius: BorderRadius.circular(widget.borderRadius),
@@ -67,16 +73,41 @@ class _NeoButtonState extends State<NeoButton> {
         transform: _isPressed
             ? (Matrix4.translationValues(4, 4, 0))
             : Matrix4.identity(),
-        child: Text(
-          widget.text.toUpperCase(),
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontFamily: 'Space Grotesk',
-            fontWeight: FontWeight.w800,
-            fontSize: 16,
-            color: widget.textColor ?? NeoColors.ink,
-          ),
-        ),
+        child: widget.icon != null
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  widget.icon!,
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      widget.text.toUpperCase(),
+                      textAlign: TextAlign.center,
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                      style: TextStyle(
+                        fontFamily: 'Space Grotesk',
+                        fontWeight: FontWeight.w800,
+                        fontSize: widget.fontSize ?? 16,
+                        color: widget.textColor ?? NeoColors.ink,
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            : Text(
+                widget.text.toUpperCase(),
+                textAlign: TextAlign.center,
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+                style: TextStyle(
+                  fontFamily: 'Space Grotesk',
+                  fontWeight: FontWeight.w800,
+                  fontSize: widget.fontSize ?? 16,
+                  color: widget.textColor ?? NeoColors.ink,
+                ),
+              ),
       ),
     );
   }

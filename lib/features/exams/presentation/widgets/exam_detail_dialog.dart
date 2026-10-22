@@ -35,7 +35,7 @@ class ExamDetailDialog extends StatelessWidget {
   });
 
   String _formatDateTime(DateTime dt) {
-    return DateFormat('dd MMMM yyyy, HH:mm').format(dt.toLocal());
+    return DateFormat('dd MMM yyyy, HH:mm').format(dt.toLocal());
   }
 
   @override
@@ -80,10 +80,25 @@ class ExamDetailDialog extends StatelessWidget {
                       ),
                     ),
                   ),
+                  if (isLecturer && onDeleteExam != null) ...[
+                    GestureDetector(
+                      onTap: onDeleteExam,
+                      child: Container(
+                        padding: const EdgeInsets.all(5),
+                        decoration: BoxDecoration(
+                          color: NeoColors.danger.withValues(alpha: 0.2),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: NeoColors.ink, width: 2),
+                        ),
+                        child: const Icon(Icons.delete_outline, size: 16, color: NeoColors.danger),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   GestureDetector(
                     onTap: () => Navigator.of(context).pop(),
                     child: Container(
-                      padding: const EdgeInsets.all(4),
+                      padding: const EdgeInsets.all(5),
                       decoration: BoxDecoration(
                         color: NeoColors.surface,
                         shape: BoxShape.circle,
@@ -440,6 +455,9 @@ class ExamDetailDialog extends StatelessWidget {
                     Expanded(
                       child: NeoButton(
                         text: 'MONITOR',
+                        fontSize: 13,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                        icon: const Icon(Icons.visibility_outlined, size: 18, color: NeoColors.ink),
                         variant: NeoButtonVariant.primary,
                         onPressed: () {
                           Navigator.of(context).pop();
@@ -447,40 +465,19 @@ class ExamDetailDialog extends StatelessWidget {
                         },
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: NeoButton(
                         text: 'REVIEW AI',
+                        fontSize: 13,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                        icon: const Icon(Icons.auto_awesome, size: 18, color: NeoColors.ink),
                         variant: NeoButtonVariant.secondary,
                         onPressed: () {
                           Navigator.of(context).pop();
                           onReviewEssay?.call();
                         },
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    if (onDeleteExam != null) ...[
-                      IconButton(
-                        style: IconButton.styleFrom(
-                          backgroundColor: NeoColors.danger.withValues(alpha: 0.15),
-                          side: const BorderSide(color: NeoColors.danger, width: 2),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        ),
-                        icon: const Icon(Icons.delete_outline, color: NeoColors.danger),
-                        tooltip: 'Hapus Ujian',
-                        onPressed: onDeleteExam,
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    IconButton(
-                      style: IconButton.styleFrom(
-                        backgroundColor: NeoColors.surface,
-                        side: const BorderSide(color: NeoColors.ink, width: 2),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                      icon: const Icon(Icons.close, color: NeoColors.ink),
-                      tooltip: 'Tutup',
-                      onPressed: () => Navigator.of(context).pop(),
                     ),
                   ],
                 ],
@@ -494,8 +491,9 @@ class ExamDetailDialog extends StatelessWidget {
 
   Widget _buildInfoRow(IconData icon, String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(icon, size: 16, color: NeoColors.ink),
           const SizedBox(width: 8),
@@ -508,14 +506,17 @@ class ExamDetailDialog extends StatelessWidget {
               color: Colors.black54,
             ),
           ),
-          const Spacer(),
-          Text(
-            value,
-            style: const TextStyle(
-              fontFamily: 'Space Mono',
-              fontWeight: FontWeight.w700,
-              fontSize: 12,
-              color: NeoColors.ink,
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: const TextStyle(
+                fontFamily: 'Space Mono',
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+                color: NeoColors.ink,
+              ),
             ),
           ),
         ],
