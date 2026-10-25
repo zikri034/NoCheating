@@ -1,5 +1,32 @@
 # Log Keputusan Teknis — SafeExam
 
+## 2026-10-25: F03 & F10 — Perbaikan Right Overflow pada Tag Status "SELESAI" di Detail Ujian Mahasiswa
+
+### Masalah yang Ditemukan
+1. **RenderFlex Overflow pada Baris Tag Status (`exam_detail_dialog.dart`)**:
+   - Saat mahasiswa membuka detail ujian (terutama ujian yang berstatus "SELESAI"), baris status atas menampilkan:
+     `Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [NeoTag('${exam.courseCode!} - ${exam.courseName ?? ''}'), NeoTag(exam.computedStatus)])`.
+   - String gabungan kode matkul dan nama matkul (misal: "IF2026 - Pemrograman Aplikasi Mobile 2026") sangat panjang.
+   - Karena `NeoTag` awal tidak memiliki batasan lebar maksimum (`overflow: TextOverflow.ellipsis`), tag sebelah kiri melebar hingga lebih dari 280px dan mendorong tag kanan (`NeoTag` status yang bertuliskan **"SELESAI"**) keluar dari batas kanan layar ponsel, memicu error garis kuning-hitam: *A RenderFlex overflowed by ... pixels on the right*.
+2. **Ketiadaan Pembatasan Teks pada Komponen `NeoTag`**:
+   - Komponen dasar `NeoTag` sebelumnya menggunakan `Text(label.toUpperCase())` polos di dalam `Row`, tanpa pembungkus `Flexible` dan tanpa `maxLines: 1` dengan `TextOverflow.ellipsis`.
+3. **Penanganan Status Tombol Mahasiswa pada Ujian Selesai**:
+   - Pada ujian yang sudah selesai, tombol aksi mahasiswa masih menampilkan "MULAI KERJAKAN UJIAN" atau "DAFTAR UJIAN SEKARANG" tanpa indikasi jelas bahwa ujian telah berakhir.
+
+### Keputusan & Solusi
+1. **Perbaikan Tata Letak Tag Detail Ujian (`ExamDetailDialog`)**:
+   - Mengubah tag kiri agar hanya memuat `exam.courseCode!` dan membungkusnya dalam `Flexible`.
+   - Menampilkan `exam.courseName` secara rapi dan leluasa tepat di bawah judul ujian (`Text(exam.title)`), konsisten dengan tampilan `ExamCard`.
+   - Tag status **"SELESAI"** (`exam.computedStatus`) kini memiliki ruang horizontal yang sangat lega dan dijamin tidak akan pernah terdorong keluar layar (*zero right overflow*).
+2. **Penyempurnaan Proteksi Komponen `NeoTag`**:
+   - Membungkus teks di dalam `NeoTag` dengan `Flexible(child: Text(..., overflow: TextOverflow.ellipsis, maxLines: 1))` sehingga seluruh `NeoTag` di aplikasi aman dari ancaman overflow teks panjang.
+3. **Penyempurnaan Tombol Aksi Mahasiswa**:
+   - Menambahkan kondisi jika `exam.computedStatus == 'SELESAI'`, tombol aksi menampilkan **"UJIAN TELAH SELESAI"** (varian sekunder) yang menutup dialog saat ditekan.
+   - Memberikan `fontSize: 13` dan padding proporsional (`horizontal: 10, vertical: 12`) pada tombol aksi mahasiswa agar nyaman dan tidak sempit.
+4. **Validasi**:
+   - `flutter analyze`: 0 issues found.
+   - `flutter test`: 45/45 test passed.
+
 ## 2026-10-22: F03 — Perbaikan Overflow Baris Selesai & Penataan Tombol Monitor dan Review AI pada Kelola Ujian
 
 ### Masalah yang Ditemukan

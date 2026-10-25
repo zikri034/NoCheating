@@ -123,10 +123,15 @@ class ExamDetailDialog extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         if (exam.courseCode != null)
-                          NeoTag(
-                            label: '${exam.courseCode!} - ${exam.courseName ?? ''}',
-                            variant: NeoTagVariant.primary,
-                          ),
+                          Flexible(
+                            child: NeoTag(
+                              label: exam.courseCode!,
+                              variant: NeoTagVariant.primary,
+                            ),
+                          )
+                        else
+                          const SizedBox.shrink(),
+                        const SizedBox(width: 8),
                         NeoTag(
                           label: exam.computedStatus,
                           variant: exam.statusVariant,
@@ -145,6 +150,18 @@ class ExamDetailDialog extends StatelessWidget {
                         color: NeoColors.ink,
                       ),
                     ),
+                    if (exam.courseName != null && exam.courseName!.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        '${exam.courseCode != null ? "${exam.courseCode!} • " : ""}${exam.courseName!}',
+                        style: const TextStyle(
+                          fontFamily: 'Hanken Grotesk',
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                          color: Colors.black54,
+                        ),
+                      ),
+                    ],
                     if (exam.description != null && exam.description!.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       Text(
@@ -429,10 +446,22 @@ class ExamDetailDialog extends StatelessWidget {
                       ),
                       const SizedBox(width: 8),
                     ],
-                    if (exam.isEnrolled)
+                    if (exam.computedStatus == 'SELESAI')
+                      Expanded(
+                        child: NeoButton(
+                          text: 'UJIAN TELAH SELESAI',
+                          fontSize: 13,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                          variant: NeoButtonVariant.secondary,
+                          onPressed: () => Navigator.of(context).pop(),
+                        ),
+                      )
+                    else if (exam.isEnrolled)
                       Expanded(
                         child: NeoButton(
                           text: 'MULAI KERJAKAN UJIAN',
+                          fontSize: 13,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
                           variant: NeoButtonVariant.primary,
                           onPressed: () {
                             Navigator.of(context).pop();
@@ -444,6 +473,8 @@ class ExamDetailDialog extends StatelessWidget {
                       Expanded(
                         child: NeoButton(
                           text: 'DAFTAR UJIAN SEKARANG',
+                          fontSize: 13,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
                           variant: NeoButtonVariant.primary,
                           onPressed: () {
                             Navigator.of(context).pop();

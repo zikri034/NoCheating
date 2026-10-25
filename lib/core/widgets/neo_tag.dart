@@ -63,14 +63,18 @@ class NeoTag extends StatelessWidget {
             Icon(icon, size: 12, color: textColor),
             const SizedBox(width: 4),
           ],
-          Text(
-            label.toUpperCase(),
-            style: TextStyle(
-              fontFamily: 'Space Grotesk',
-              fontWeight: FontWeight.w800,
-              fontSize: 11,
-              color: textColor,
-              letterSpacing: 0.5,
+          Flexible(
+            child: Text(
+              label.toUpperCase(),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+              style: TextStyle(
+                fontFamily: 'Space Grotesk',
+                fontWeight: FontWeight.w800,
+                fontSize: 11,
+                color: textColor,
+                letterSpacing: 0.5,
+              ),
             ),
           ),
         ],

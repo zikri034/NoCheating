@@ -493,7 +493,7 @@ CREATE TABLE attempt_answers (
   selected_option text,
   answer_text text,
   updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (attempt_id, question_id)
+  UNIQUE (attempt_id, question_id) 
 );
 
 CREATE TABLE essay_grades (

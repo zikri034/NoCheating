@@ -48,12 +48,15 @@ class ExamCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 if (exam.courseCode != null)
-                  NeoTag(
-                    label: exam.courseCode!,
-                    variant: NeoTagVariant.primary,
+                  Flexible(
+                    child: NeoTag(
+                      label: exam.courseCode!,
+                      variant: NeoTagVariant.primary,
+                    ),
                   )
                 else
                   const SizedBox.shrink(),
+                const SizedBox(width: 8),
                 NeoTag(
                   label: exam.computedStatus,
                   variant: exam.statusVariant,
