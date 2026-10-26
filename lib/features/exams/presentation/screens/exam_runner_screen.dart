@@ -7,12 +7,20 @@ import '../../../../core/widgets/neo_tag.dart';
 import '../../../../core/widgets/neo_text_field.dart';
 import '../providers/exam_runner_provider.dart';
 import '../../data/repositories/attempt_repository.dart';
+import '../../../../core/services/geofence_service.dart';
 import 'exam_result_screen.dart';
 
 class ExamRunnerScreen extends StatefulWidget {
   final String examId;
+  final double? initialLatitude;
+  final double? initialLongitude;
 
-  const ExamRunnerScreen({super.key, required this.examId});
+  const ExamRunnerScreen({
+    super.key,
+    required this.examId,
+    this.initialLatitude,
+    this.initialLongitude,
+  });
 
   @override
   State<ExamRunnerScreen> createState() => _ExamRunnerScreenState();
@@ -27,7 +35,11 @@ class _ExamRunnerScreenState extends State<ExamRunnerScreen> with WidgetsBinding
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final runner = context.read<ExamRunnerProvider>();
-      runner.initExamSession(widget.examId);
+      runner.initExamSession(
+        widget.examId,
+        latitude: widget.initialLatitude,
+        longitude: widget.initialLongitude,
+      );
     });
   }
 
@@ -382,6 +394,11 @@ class _ExamRunnerScreenState extends State<ExamRunnerScreen> with WidgetsBinding
     }
 
     if (runner.errorMessage != null && runner.attempt == null) {
+      final isGeofenceError = runner.errorMessage!.toLowerCase().contains('geofence') ||
+          runner.errorMessage!.toLowerCase().contains('lokasi') ||
+          runner.errorMessage!.toLowerCase().contains('gps') ||
+          runner.errorMessage!.toLowerCase().contains('radius');
+
       return Scaffold(
         backgroundColor: NeoColors.bg,
         appBar: AppBar(
@@ -389,22 +406,85 @@ class _ExamRunnerScreenState extends State<ExamRunnerScreen> with WidgetsBinding
           title: const Text('SAFEEXAM', style: TextStyle(fontFamily: 'Space Grotesk', fontWeight: FontWeight.w800)),
         ),
         body: Center(
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
             child: NeoCard(
               padding: const EdgeInsets.all(24),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.error_outline, size: 48, color: NeoColors.danger),
+                  Icon(
+                    isGeofenceError ? Icons.location_off_rounded : Icons.error_outline,
+                    size: 48,
+                    color: NeoColors.danger,
+                  ),
                   const SizedBox(height: 12),
                   Text(
-                    runner.errorMessage!,
+                    isGeofenceError ? 'VERIFIKASI LOKASI / GEOFENCE' : 'GAGAL MEMULAI UJIAN',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontFamily: 'Hanken Grotesk', fontSize: 14),
+                    style: const TextStyle(
+                      fontFamily: 'Space Grotesk',
+                      fontWeight: FontWeight.w800,
+                      fontSize: 18,
+                      color: NeoColors.ink,
+                    ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: NeoColors.danger.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: NeoColors.danger, width: 1.5),
+                    ),
+                    child: Text(
+                      runner.errorMessage!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontFamily: 'Hanken Grotesk',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: NeoColors.danger,
+                      ),
+                    ),
+                  ),
+                  if (isGeofenceError) ...[
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Ujian ini mewajibkan mahasiswa berada di dalam radius tempat ujian (geofence). Koordinat lokasi GPS dibaca secara otomatis dari sensor HP Anda.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: 'Hanken Grotesk',
+                        fontSize: 12,
+                        color: NeoColors.ink,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    NeoButton(
+                      text: 'BACA ULANG GPS & COBA LAGI',
+                      icon: const Icon(Icons.my_location, size: 18),
+                      backgroundColor: NeoColors.primary,
+                      onPressed: () async {
+                        final pos = await GeofenceService().getCurrentPosition();
+                        if (!context.mounted) return;
+                        runner.initExamSession(
+                          widget.examId,
+                          latitude: pos?.latitude,
+                          longitude: pos?.longitude,
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    NeoButton(
+                      text: 'BUKA PENGATURAN GPS HP',
+                      icon: const Icon(Icons.settings, size: 18),
+                      backgroundColor: NeoColors.tertiary,
+                      onPressed: () => GeofenceService().openSettings(),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
                   if (runner.errorMessage!.contains('sudah diselesaikan') || runner.errorMessage!.contains('ALREADY_FINISHED')) ...[
+                    const SizedBox(height: 16),
                     NeoButton(
                       text: 'LIHAT HASIL UJIAN',
                       backgroundColor: NeoColors.success,
@@ -426,8 +506,10 @@ class _ExamRunnerScreenState extends State<ExamRunnerScreen> with WidgetsBinding
                     ),
                     const SizedBox(height: 10),
                   ],
+                  if (!isGeofenceError) const SizedBox(height: 16),
                   NeoButton(
-                    text: 'KEMBALI',
+                    text: 'KEMBALI KE DAFTAR UJIAN',
+                    variant: NeoButtonVariant.secondary,
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],

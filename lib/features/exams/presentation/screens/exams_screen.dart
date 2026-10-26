@@ -192,6 +192,8 @@ class _ExamsScreenState extends State<ExamsScreen> {
     }
 
     // 2. Geofence verification if required (PRD F06)
+    double? userLat;
+    double? userLng;
     if (exam != null && exam.requireGeofence && exam.venueLat != null && exam.venueLng != null) {
       final status = await _geofenceService.checkGeofence(
         venueLat: exam.venueLat!,
@@ -233,6 +235,9 @@ class _ExamsScreenState extends State<ExamsScreen> {
         );
         return;
       }
+
+      userLat = status.currentPosition?.latitude;
+      userLng = status.currentPosition?.longitude;
     }
 
     if (!mounted) return;
@@ -241,7 +246,11 @@ class _ExamsScreenState extends State<ExamsScreen> {
       MaterialPageRoute(
         builder: (_) => ChangeNotifierProvider(
           create: (_) => ExamRunnerProvider(repository: AttemptRepository()),
-          child: ExamRunnerScreen(examId: examId),
+          child: ExamRunnerScreen(
+            examId: examId,
+            initialLatitude: userLat,
+            initialLongitude: userLng,
+          ),
         ),
       ),
     ).then((_) {

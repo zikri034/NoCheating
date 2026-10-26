@@ -156,11 +156,27 @@ class ExamRunnerProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
 
+    double? finalLat = latitude;
+    double? finalLng = longitude;
+
+    // Auto-fetch GPS coordinates if not provided (needed for geofence exams)
+    if (finalLat == null || finalLng == null) {
+      try {
+        final pos = await _geofenceService.getCurrentPosition();
+        if (pos != null) {
+          finalLat = pos.latitude;
+          finalLng = pos.longitude;
+        }
+      } catch (_) {
+        // Ignored on platforms or headless test environments without GPS hardware
+      }
+    }
+
     try {
       final data = await _repository.startOrResumeAttempt(
         examId,
-        latitude: latitude,
-        longitude: longitude,
+        latitude: finalLat,
+        longitude: finalLng,
       );
       _attempt = data['attempt'] as AttemptModel;
       _examMeta = data['exam'] as Map<String, dynamic>?;
