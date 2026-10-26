@@ -15,6 +15,7 @@ import '../../../../core/widgets/neo_snackbar.dart';
 import '../../../../core/services/notification_service.dart';
 import '../../../../features/auth/presentation/providers/auth_provider.dart';
 import '../../../../features/auth/presentation/screens/login_screen.dart';
+import 'sensor_diagnostic_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   final bool isTab;
@@ -630,6 +631,50 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       fontSize: 12,
                       color: NeoColors.ink.withValues(alpha: 0.7),
                     ),
+                  ),
+                ],
+              ),
+            ),
+            // SENSOR DIAGNOSTIC LAB CARD (Real-time testing)
+            NeoCard(
+              backgroundColor: NeoColors.surface,
+              header: const Row(
+                children: [
+                  Icon(Icons.sensors, color: NeoColors.ink, size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    'LAB DIAGNOSTIK SENSOR',
+                    style: TextStyle(
+                      fontFamily: 'Space Grotesk',
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16,
+                      color: NeoColors.ink,
+                    ),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'Uji coba live seluruh sensor HP: Akselerometer (guncangan), Giroskop (rotasi), GPS & Geofence, Biometrik, Proteksi Layar (FLAG_SECURE), & Deteksi Background.',
+                    style: TextStyle(
+                      fontFamily: 'Hanken Grotesk',
+                      fontSize: 13,
+                      color: NeoColors.ink,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  NeoButton(
+                    text: 'BUKA UJI SENSOR LIVE',
+                    icon: const Icon(Icons.speed, size: 18),
+                    backgroundColor: NeoColors.tertiary,
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const SensorDiagnosticScreen()),
+                      );
+                    },
                   ),
                 ],
               ),
