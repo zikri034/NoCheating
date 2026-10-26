@@ -406,6 +406,50 @@ export const fetchAttemptResultData = async (attemptId: string, userId: string, 
       'essay_grades.teacher_comment'
     );
 
+  // Fetch questions to calculate score breakdown
+  const examQuestions = await db('exam_questions')
+    .join('questions', 'exam_questions.question_id', 'questions.id')
+    .where('exam_questions.exam_id', attempt.exam_id)
+    .select('questions.id', 'questions.type', 'questions.max_score', 'questions.correct_option');
+
+  let mcqScore = 0;
+  let maxMcqScore = 0;
+  let maxEssayScore = 0;
+  let essayFinalScore = 0;
+  let hasUnfinalizedEssay = false;
+  let essayCount = 0;
+
+  const mcqQuestionMap = new Map<string, { maxScore: number; correctOption: string | null }>();
+  for (const eq of examQuestions) {
+    const mScore = Number(eq.max_score) || 0;
+    if (eq.type === 'mcq') {
+      maxMcqScore += mScore;
+      mcqQuestionMap.set(eq.id, {
+        maxScore: mScore,
+        correctOption: eq.correct_option ? eq.correct_option.trim().toUpperCase() : null,
+      });
+    } else if (eq.type === 'essay') {
+      essayCount++;
+      maxEssayScore += mScore;
+    }
+  }
+
+  for (const a of rawAnswers) {
+    if (a.type === 'mcq') {
+      const qMeta = mcqQuestionMap.get(a.question_id);
+      const studentAns = a.selected_option ? a.selected_option.trim().toUpperCase() : null;
+      if (qMeta && qMeta.correctOption && studentAns === qMeta.correctOption) {
+        mcqScore += qMeta.maxScore;
+      }
+    } else if (a.type === 'essay') {
+      if (a.essay_grade_status === 'finalized' && a.essay_final_score != null) {
+        essayFinalScore += Number(a.essay_final_score);
+      } else {
+        hasUnfinalizedEssay = true;
+      }
+    }
+  }
+
   const answers = rawAnswers.map((a) => {
     let aiParsed = null;
     if (a.ai_json) {
@@ -418,6 +462,17 @@ export const fetchAttemptResultData = async (attemptId: string, userId: string, 
 
     const isProvisional = a.type === 'essay' && a.essay_grade_status !== 'finalized';
 
+    let isCorrect: boolean | null = null;
+    let awardedScore = 0;
+    if (a.type === 'mcq') {
+      const qMeta = mcqQuestionMap.get(a.question_id);
+      const studentAns = a.selected_option ? a.selected_option.trim().toUpperCase() : null;
+      isCorrect = (qMeta && qMeta.correctOption) ? (studentAns === qMeta.correctOption) : null;
+      awardedScore = isCorrect ? (qMeta?.maxScore || 0) : 0;
+    } else if (a.type === 'essay') {
+      awardedScore = a.essay_final_score != null ? Number(a.essay_final_score) : (a.ai_score != null ? Number(a.ai_score) : 0);
+    }
+
     return {
       id: a.id,
       question_id: a.question_id,
@@ -425,9 +480,11 @@ export const fetchAttemptResultData = async (attemptId: string, userId: string, 
       answer_text: a.answer_text,
       type: a.type,
       question_text: a.question_text,
-      max_score: a.max_score,
-      essay_final_score: a.essay_final_score,
-      essay_ai_score: a.ai_score,
+      max_score: Number(a.max_score) || 0,
+      awarded_score: Math.round(awardedScore * 100) / 100,
+      is_correct: isCorrect,
+      essay_final_score: a.essay_final_score != null ? Number(a.essay_final_score) : null,
+      essay_ai_score: a.ai_score != null ? Number(a.ai_score) : null,
       essay_grade_status: a.essay_grade_status,
       is_provisional: isProvisional,
       ai_breakdown: aiParsed,
@@ -439,7 +496,13 @@ export const fetchAttemptResultData = async (attemptId: string, userId: string, 
   return {
     attempt: {
       ...attempt,
-      has_essay: answers.some((a) => a.type === 'essay'),
+      mcq_score: Math.round(mcqScore * 100) / 100,
+      max_mcq_score: Math.round(maxMcqScore * 100) / 100,
+      essay_score: essayCount > 0 ? (hasUnfinalizedEssay ? null : Math.round(essayFinalScore * 100) / 100) : null,
+      max_essay_score: Math.round(maxEssayScore * 100) / 100,
+      has_essay: essayCount > 0,
+      has_unfinalized_essay: hasUnfinalizedEssay,
+      is_finalized: attempt.status === 'graded',
     },
     exam: {
       id: attempt.exam_id,

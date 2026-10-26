@@ -221,10 +221,12 @@ class ExamCard extends StatelessWidget {
                 if (!isLecturer && exam.hasSubmitted)
                   NeoTag(
                     label: exam.myAttemptScore != null
-                        ? 'NILAI: ${exam.myAttemptScore!.toStringAsFixed(0)}'
+                        ? (exam.myAttemptStatus == 'graded'
+                            ? 'NILAI: ${exam.myAttemptScore!.toStringAsFixed(0)}'
+                            : 'NILAI PG: ${exam.myAttemptScore!.toStringAsFixed(0)} (REVIEW)')
                         : 'SUDAH DIKERJAKAN',
                     icon: Icons.stars,
-                    variant: NeoTagVariant.success,
+                    variant: exam.myAttemptStatus == 'graded' ? NeoTagVariant.success : NeoTagVariant.warning,
                   ),
               ],
             ),

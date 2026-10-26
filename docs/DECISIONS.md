@@ -1,5 +1,47 @@
 # Log Keputusan Teknis — SafeExam
 
+## 2026-10-27: F07 — Penilaian Instan Pilihan Ganda (PG) & Review Essay Terpadu Dikelompokkan Per Mahasiswa
+
+### Kebutuhan & Masalah
+1. **Penilaian Pilihan Ganda (PG) Terblokir Status "Menunggu Finalisasi Dosen"**:
+   - Sebelumnya, jika suatu ujian memiliki soal essay, status pengerjaan mahasiswa (`exam_attempts.status`) tetap `'submitted'`.
+   - Pada layar hasil ujian mahasiswa (`ExamResultScreen`) dan kartu daftar ujian (`ExamCard`), skor total hanya menampilkan "MENUNGGU FINALISASI DOSEN", sehingga mahasiswa bingung dan tidak mengetahui apakah jawaban pilihan gandanya sudah dinilai atau berapa skor PG yang diperolehnya.
+2. **Review Essay Terpecah Per Butir Soal dan Membebani Dosen**:
+   - Sebelumnya, dosen melihat antrean essay yang terpecah per soal individual dari berbagai mahasiswa secara acak. Jika seorang mahasiswa memiliki 3 soal essay, muncul 3 kartu terpisah.
+   - Dosen harus memasukkan nilai dan catatan secara berulang-ulang untuk tiap butir soal, lalu menekan tombol simpan satu per satu.
+   - Dosen menginginkan alur yang efisien: saat membuka review, muncul daftar nama mahasiswa yang essainya perlu direview. Saat nama mahasiswa dipilih, semua jawaban essay mahasiswa tersebut langsung tampil berurutan, dan penilaian dilakukan sekaligus menjadi satu nilai total essay di akhir tanpa perlu nilai dan catatan per soal.
+
+### Keputusan & Solusi
+1. **Pemisahan Skor PG dan Essay Secara Transparan (`server/src/routes/attempts.ts` & `ExamResultScreen`)**:
+   - Backend `fetchAttemptResultData` kini menghitung dan mengembalikan rincian skor terpisah:
+     - `mcq_score`: Skor total pilihan ganda yang diperoleh mahasiswa (dihitung otomatis saat submit).
+     - `max_mcq_score`: Bobot maksimum pilihan ganda pada ujian.
+     - `essay_score`: Skor akhir essay (jika sudah difinalisasi oleh dosen) atau `null` (jika sedang direview).
+     - `max_essay_score`: Bobot maksimum essay pada ujian.
+     - `has_unfinalized_essay`: Menandai apakah masih ada soal essay yang belum difinalisasi dosen.
+     - `answers`: Dilengkapi status `is_correct` dan `awarded_score` untuk setiap butir soal PG (tanpa membocorkan `correct_option` ke mahasiswa sesuai Rule 6).
+   - Di `ExamResultScreen`:
+     - Ditampilkan kartu khusus **NILAI PILIHAN GANDA (PG)** dengan tag `LANGSUNG DINILAI` (hijau), menampilkan skor PG secara instan.
+     - Ditampilkan kartu **NILAI ESSAY** dengan status `MENUNGGU REVIEW DOSEN` (kuning) atau `SELESAI DIREVIEW` (hijau).
+     - Ditampilkan kartu **TOTAL NILAI**: jika essay belum difinalisasi, tampil `TOTAL SEMENTARA (PG)`; jika sudah selesai direview dosen, tampil `TOTAL NILAI AKHIR`.
+   - Di `ExamCard`:
+     - Mahasiswa langsung melihat badge status `NILAI PG: [skor] (REVIEW)` saat essay masih dalam proses review, bukan disembunyikan.
+2. **Review Essay Dikelompokkan Per Mahasiswa (`server/src/routes/reviews.ts` & `EssayReviewScreen`)**:
+   - **Backend API Baru**:
+     - `GET /api/reviews/by-student`: Mengelompokkan antrean essay berdasarkan attempt mahasiswa. Mengembalikan nama mahasiswa, NIM, skor PG, bobot essay, total saran skor AI, dan array seluruh jawaban essay mahasiswa.
+     - `POST /api/reviews/attempts/:attemptId/finalize`: Menerima `{ total_essay_score: number, teacher_comment?: string }`. Secara proporsional mendistribusikan nilai akhir ke baris-baris soal essay mahasiswa, memperbarui status menjadi `finalized`, mengupdate `exam_attempts.total_score = mcq_score + total_essay_score` dan status `'graded'`, serta mencatat blok `RESULT` pada blockchain.
+   - **Tampilan Dosen (`EssayReviewScreen` & `StudentEssayDetailScreen`)**:
+     - Halaman utama review default menampilkan tab **"Perlu Review ([jumlah])"**.
+     - Setiap kartu menampilkan satu mahasiswa (Nama, NIM, Jumlah Soal Essay, Skor PG, Rekomendasi AI).
+     - Mengklik nama/kartu mahasiswa langsung membuka halaman detail **`StudentEssayDetailScreen`**.
+     - Seluruh butir soal dan jawaban essay mahasiswa ditampilkan berurutan lengkap dengan analisis/umpan balik dari Gemini AI.
+     - Tanpa ada input nilai per butir soal.
+     - Di bagian paling bawah halaman, tersedia satu formulir **PENILAIAN AKHIR ESSAY SISWA** dengan rekomendasi total AI, tombol pintas `"GUNAKAN SARAN AI"`, input total nilai essay, catatan umum opsional, dan tombol Neo-Brutalist besar **"SIMPAN & SELESAIKAN PENILAIAN SISWA"**.
+3. **Validasi**:
+   - Backend vitest tests: 79/79 passed (termasuk unit & integrasi review per mahasiswa).
+   - Flutter analyzer: `dart analyze lib` -> 0 issues found (clean).
+   - Flutter test suite: 51/51 tests passed.
+
 ## 2026-10-26: F03 & F10 — Perbaikan Soal Muncul Sendiri di Bank Soal & Alur Pembuatan Materi Baru untuk Dosen
 
 ### Masalah yang Ditemukan

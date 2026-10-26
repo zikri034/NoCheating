@@ -75,5 +75,53 @@ void main() {
       final currentScore = rawRow['teacher_score'] ?? rawRow['ai_score'] ?? 0;
       expect('$currentScore', '8.00');
     });
+
+    test('Student grouped essay evaluation calculates overall status and combined score correctly', () {
+      final studentGroup = {
+        'attempt_id': 'att-123',
+        'student_name': 'Ahmad Fauzi',
+        'student_nim': '220102',
+        'mcq_score': 60.0,
+        'max_mcq_score': 60.0,
+        'max_essay_score': 40.0,
+        'ai_essay_score_sum': 32.0,
+        'final_essay_score_sum': 35.0,
+        'all_finalized': true,
+        'essays': [
+          {'question_id': 'q-1', 'max_score': 20.0, 'status': 'finalized', 'final_score': 18.0},
+          {'question_id': 'q-2', 'max_score': 20.0, 'status': 'finalized', 'final_score': 17.0},
+        ],
+      };
+
+      final mcqScore = studentGroup['mcq_score'] as double;
+      final essayScore = studentGroup['final_essay_score_sum'] as double;
+      final totalScore = mcqScore + essayScore;
+
+      expect(totalScore, 95.0);
+      expect(studentGroup['all_finalized'], isTrue);
+      expect((studentGroup['essays'] as List).length, 2);
+    });
+
+    test('Instant MCQ score is available while essay review is pending', () {
+      final attemptResult = {
+        'attempt': {
+          'id': 'att-456',
+          'status': 'submitted',
+          'total_score': 50.0,
+          'mcq_score': 50.0,
+          'max_mcq_score': 50.0,
+          'essay_score': null,
+          'max_essay_score': 50.0,
+          'has_essay': true,
+          'has_unfinalized_essay': true,
+          'is_finalized': false,
+        },
+      };
+
+      final attempt = attemptResult['attempt'] as Map<String, dynamic>;
+      expect(attempt['mcq_score'], 50.0);
+      expect(attempt['is_finalized'], isFalse);
+      expect(attempt['has_unfinalized_essay'], isTrue);
+    });
   });
 }

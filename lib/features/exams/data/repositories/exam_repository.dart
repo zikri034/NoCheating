@@ -189,6 +189,43 @@ class ExamRepository {
     }
   }
 
+  /// Ambil daftar review essay dikelompokkan per mahasiswa
+  Future<List<Map<String, dynamic>>> fetchStudentEssayReviews({
+    String? status,
+    String? examId,
+  }) async {
+    try {
+      final queryParams = <String, dynamic>{};
+      if (status != null && status.isNotEmpty) queryParams['status'] = status;
+      if (examId != null && examId.isNotEmpty) queryParams['exam_id'] = examId;
+
+      final response = await _dio.get('/reviews/by-student', queryParameters: queryParams);
+      final List list = response.data['students'] as List? ?? [];
+      return list.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+    } on DioException catch (e) {
+      final msg = e.response?.data?['error']?['message'] ?? e.message ?? 'Gagal memuat antrean review siswa';
+      throw Exception(msg);
+    }
+  }
+
+  /// Finalisasi nilai seluruh essay dalam 1 siswa sekaligus oleh dosen
+  Future<Map<String, dynamic>> finalizeStudentEssays(
+    String attemptId, {
+    required double totalEssayScore,
+    String? teacherComment,
+  }) async {
+    try {
+      final response = await _dio.post('/reviews/attempts/$attemptId/finalize', data: {
+        'total_essay_score': totalEssayScore,
+        'teacher_comment': teacherComment,
+      });
+      return Map<String, dynamic>.from(response.data as Map);
+    } on DioException catch (e) {
+      final msg = e.response?.data?['error']?['message'] ?? e.message ?? 'Gagal memfinalisasi penilaian essay siswa';
+      throw Exception(msg);
+    }
+  }
+
   /// Finalisasi atau ubah nilai essay oleh dosen (PRD F07)
   Future<Map<String, dynamic>> finalizeEssayGrade(
     String gradeId, {

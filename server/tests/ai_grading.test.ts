@@ -328,15 +328,50 @@ describe('Sprint 6 (F07) — AI Essay Grading Unit & Integration Tests', () => {
       expect(attemptRow.status).toBe('graded');
       expect(Number(attemptRow.total_score)).toBe(100);
 
-      // 4. Student sees is_provisional = false now
+      // 4. Student sees is_provisional = false now and breakdown
       const finalResultRes = await request(app)
         .get(`/api/attempts/${testAttemptId}/result`)
         .set('Authorization', `Bearer ${studentToken}`);
+
+      expect(finalResultRes.body.attempt.mcq_score).toBe(50);
+      expect(finalResultRes.body.attempt.max_mcq_score).toBe(50);
+      expect(finalResultRes.body.attempt.essay_score).toBe(50);
+      expect(finalResultRes.body.attempt.max_essay_score).toBe(50);
+      expect(finalResultRes.body.attempt.is_finalized).toBe(true);
 
       const finalEssayAns = finalResultRes.body.answers.find((a: any) => a.type === 'essay');
       expect(finalEssayAns.is_provisional).toBe(false);
       expect(Number(finalEssayAns.essay_final_score)).toBe(50);
       expect(finalEssayAns.teacher_comment).toContain('bonus 2 poin');
+    });
+
+    it('should support grouped reviews via GET /api/reviews/by-student and student-level finalization', async () => {
+      // 1. Check GET /api/reviews/by-student
+      const groupRes = await request(app)
+        .get(`/api/reviews/by-student?exam_id=${testExamId}`)
+        .set('Authorization', `Bearer ${lecturerToken}`);
+
+      expect(groupRes.status).toBe(200);
+      expect(Array.isArray(groupRes.body.students)).toBe(true);
+      const studentGroup = groupRes.body.students.find((s: any) => s.attempt_id === testAttemptId);
+      expect(studentGroup).toBeDefined();
+      expect(studentGroup.student_name).toBeDefined();
+      expect(studentGroup.essays.length).toBeGreaterThan(0);
+      expect(studentGroup.mcq_score).toBe(50);
+
+      // 2. Finalize entire student essay via POST /api/reviews/attempts/:attemptId/finalize
+      const finalizeRes = await request(app)
+        .post(`/api/reviews/attempts/${testAttemptId}/finalize`)
+        .set('Authorization', `Bearer ${lecturerToken}`)
+        .send({
+          total_essay_score: 48,
+          teacher_comment: 'Penilaian essay kolektif mahasiswa selesai.',
+        });
+
+      expect(finalizeRes.status).toBe(200);
+      expect(finalizeRes.body.status).toBe('graded');
+      expect(finalizeRes.body.essay_score).toBe(48);
+      expect(finalizeRes.body.total_score).toBe(98); // 50 MCQ + 48 Essay
     });
 
     it('should set status to pending_manual when AI service throws an unrecoverable error', async () => {
