@@ -21,6 +21,9 @@ class ExamModel {
   final String? courseCode;
   final String? lecturerName;
   final bool isEnrolled;
+  final String? myAttemptId;
+  final String? myAttemptStatus;
+  final double? myAttemptScore;
 
   ExamModel({
     required this.id,
@@ -43,6 +46,9 @@ class ExamModel {
     this.courseCode,
     this.lecturerName,
     this.isEnrolled = false,
+    this.myAttemptId,
+    this.myAttemptStatus,
+    this.myAttemptScore,
   });
 
   factory ExamModel.fromJson(Map<String, dynamic> json) {
@@ -67,6 +73,9 @@ class ExamModel {
       courseCode: json['course_code'] as String?,
       lecturerName: json['lecturer_name'] as String?,
       isEnrolled: json['is_enrolled'] == true || json['is_enrolled'] == 1,
+      myAttemptId: json['my_attempt_id'] as String?,
+      myAttemptStatus: json['my_attempt_status'] as String?,
+      myAttemptScore: double.tryParse(json['my_attempt_score']?.toString() ?? ''),
     );
   }
 
@@ -92,8 +101,16 @@ class ExamModel {
       'course_code': courseCode,
       'lecturer_name': lecturerName,
       'is_enrolled': isEnrolled,
+      'my_attempt_id': myAttemptId,
+      'my_attempt_status': myAttemptStatus,
+      'my_attempt_score': myAttemptScore,
     };
   }
+
+  bool get hasSubmitted =>
+      myAttemptStatus == 'submitted' ||
+      myAttemptStatus == 'graded' ||
+      myAttemptStatus == 'terminated';
 
   String get computedStatus {
     if (status == 'draft') return 'DRAFT';
@@ -137,6 +154,9 @@ class ExamModel {
     String? courseCode,
     String? lecturerName,
     bool? isEnrolled,
+    String? myAttemptId,
+    String? myAttemptStatus,
+    double? myAttemptScore,
   }) {
     return ExamModel(
       id: id ?? this.id,
@@ -159,6 +179,9 @@ class ExamModel {
       courseCode: courseCode ?? this.courseCode,
       lecturerName: lecturerName ?? this.lecturerName,
       isEnrolled: isEnrolled ?? this.isEnrolled,
+      myAttemptId: myAttemptId ?? this.myAttemptId,
+      myAttemptStatus: myAttemptStatus ?? this.myAttemptStatus,
+      myAttemptScore: myAttemptScore ?? this.myAttemptScore,
     );
   }
 }

@@ -1,5 +1,36 @@
 # Log Keputusan Teknis — SafeExam
 
+## 2026-10-26: F03 & F10 — Perbaikan Soal Muncul Sendiri di Bank Soal & Alur Pembuatan Materi Baru untuk Dosen
+
+### Masalah yang Ditemukan
+1. **Soal Muncul Sendiri Setelah Dihapus di Bank Soal**:
+   - Di `server/src/routes/questions.ts`, endpoint `GET /api/questions` membatasi paginasi dengan `pageSize = Math.min(50, Math.max(1, parseInt(limit as string, 10) || 20))`.
+   - Frontend memanggil `fetchQuestions` tanpa menyertakan `limit`, sehingga backend memotong daftar hanya 20 soal pertama.
+   - Ketika dosen memiliki > 20 soal lalu menghapus 1 butir soal, soal urutan ke-21 yang sebelumnya terpotong masuk ke dalam 20 besar setelah refresh/reload. Hal ini menimbulkan ilusi bahwa ada "soal gaib yang muncul sendiri padahal sudah dihapus".
+2. **Ketiadaan Opsi Dosen Membuat Materi Baru Langsung**:
+   - Dosen tidak dapat membuat materi/mata kuliah baru secara langsung saat membuat soal manual atau saat ekstraksi naskah soal via Gemini AI. Dosen harus keluar dari alur dan membuat ujian/soal tanpa pengelompokan yang jelas.
+
+### Keputusan & Solusi
+1. **Penyempurnaan Paginasi Bank Soal (`server/src/routes/questions.ts` & `exam_repository.dart`)**:
+   - Mengubah backend `GET /api/questions` agar saat parameter `limit` tidak dikirim oleh klien, backend mengembalikan seluruh soal hingga `pageSize = 1000` (bukan dipotong di 20).
+   - Menambahkan query parameter eksplisit `limit: 1000` pada `ExamRepository.fetchQuestions` untuk menjamin konsistensi.
+2. **Alur Terpadu Buat Soal / Ekstrak Soal -> Buat Materi Baru / Pilih Materi -> Simpan**:
+   - **`CreateQuestionDialog`**:
+     - Ditambahkan toggle mode `[PILIH YANG ADA] | [+ BUAT MATERI BARU]`.
+     - Saat memilih materi baru, disediakan input `Kode Materi` (contoh: `IF4501`) dan `Nama Materi`.
+     - Saat tombol SIMPAN ditekan, sistem otomatis membuat materi baru via `POST /api/courses` dan langsung mengaitkan ID materi baru tersebut ke butir soal yang disimpan.
+   - **`ExtractQuestionsDialog`**:
+     - Disediakan toggle mode yang sama.
+     - Terintegrasi dengan deteksi topik Gemini AI (`course_topic_detected`), otomatis mengisi saran Nama Materi dan Kode Materi baru jika dosen memilih opsi materi baru.
+     - Menyimpan seluruh butir soal hasil ekstraksi ke materi baru tersebut dalam satu langkah.
+   - **`ExamsScreen`**:
+     - Menambahkan tombol aksi cepat `+ MATERI` di bar header Bank Soal dan tombol `BUAT MATERI BARU` di layar empty state.
+     - Membuka modal Neo-Brutalist `_showCreateCourseDialog` untuk pembuatan materi langsung, yang otomatis menyaring tampilan bank soal ke materi baru tersebut.
+3. **Validasi**:
+   - `npm run lint` & `npm test`: 79/79 test passed (0 errors).
+   - `flutter analyze`: 0 issues found.
+   - `flutter test`: 49/49 test passed.
+
 ## 2026-10-25: F03 & F10 — Perbaikan Right Overflow pada Tag Status "SELESAI" di Detail Ujian Mahasiswa
 
 ### Masalah yang Ditemukan

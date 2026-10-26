@@ -19,6 +19,22 @@ class NeoSnackbar {
     );
   }
 
+  static void showWarning(
+    BuildContext context, {
+    required String title,
+    String? message,
+    Duration duration = const Duration(seconds: 5),
+  }) {
+    _show(
+      context,
+      title: title,
+      message: message,
+      backgroundColor: NeoColors.warning,
+      icon: Icons.warning_amber_rounded,
+      duration: duration,
+    );
+  }
+
   static void showError(
     BuildContext context, {
     required String title,

@@ -121,6 +121,16 @@ class AttemptRepository {
     }
   }
 
+  Future<Map<String, dynamic>> fetchExamResultByExamId(String examId) async {
+    try {
+      final response = await _dio.get('/exams/$examId/my-result');
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      final msg = e.response?.data?['error']?['message'] ?? e.message ?? 'Gagal memuat hasil ujian';
+      throw Exception(msg);
+    }
+  }
+
   Future<Map<String, dynamic>> recordViolation(
     String attemptId, {
     required String type,

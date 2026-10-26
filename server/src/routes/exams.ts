@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import db from '../db/knex';
 import { jwtMiddleware, requireRole } from '../middleware/auth.middleware';
-import { startAttemptHandler } from './attempts';
+import { startAttemptHandler, fetchAttemptResultData } from './attempts';
 
 const router = Router();
 
@@ -53,6 +53,10 @@ router.get('/', jwtMiddleware, async (req: Request, res: Response) => {
         this.on('exams.id', '=', 'enrollments.exam_id')
           .andOn('enrollments.student_id', '=', db.raw('?', [userId || '00000000-0000-0000-0000-000000000000']));
       })
+      .leftJoin('exam_attempts', function () {
+        this.on('exams.id', '=', 'exam_attempts.exam_id')
+          .andOn('exam_attempts.student_id', '=', db.raw('?', [userId || '00000000-0000-0000-0000-000000000000']));
+      })
       .select(
         'exams.id', 'exams.course_id', 'exams.title', 'exams.description',
         'exams.start_at', 'exams.end_at', 'exams.duration_min',
@@ -62,7 +66,10 @@ router.get('/', jwtMiddleware, async (req: Request, res: Response) => {
         'exams.ai_auto_finalize', 'exams.status',
         'courses.name as course_name', 'courses.code as course_code',
         'users.name as lecturer_name',
-        db.raw('CASE WHEN enrollments.student_id IS NOT NULL THEN true ELSE false END as is_enrolled')
+        db.raw('CASE WHEN enrollments.student_id IS NOT NULL THEN true ELSE false END as is_enrolled'),
+        'exam_attempts.id as my_attempt_id',
+        'exam_attempts.status as my_attempt_status',
+        'exam_attempts.total_score as my_attempt_score'
       );
 
     // Search by title, course name, or lecturer name (trigram)
@@ -138,6 +145,14 @@ router.get('/:id', jwtMiddleware, async (req: Request, res: Response) => {
       ? !!(await db('enrollments').where({ exam_id: id, student_id: userId }).first())
       : false;
 
+    // Check student's attempt if user exists
+    let myAttempt = null;
+    if (userId) {
+      myAttempt = await db('exam_attempts')
+        .where({ exam_id: id, student_id: userId })
+        .first();
+    }
+
     // Get questions for this exam
     let questionsQuery = db('exam_questions')
       .join('questions', 'exam_questions.question_id', 'questions.id')
@@ -167,10 +182,46 @@ router.get('/:id', jwtMiddleware, async (req: Request, res: Response) => {
       exam: {
         ...exam,
         is_enrolled: isEnrolled,
+        my_attempt_id: myAttempt?.id ?? null,
+        my_attempt_status: myAttempt?.status ?? null,
+        my_attempt_score: myAttempt?.total_score ?? null,
       },
+      my_attempt: myAttempt,
       questions,
       enrollment_count: parseInt((enrollmentCount as any)?.total || '0', 10),
     });
+  } catch (error) {
+    return res.status(500).json({
+      error: { code: 'INTERNAL_ERROR', message: (error as Error).message },
+    });
+  }
+});
+
+// GET /api/exams/:id/my-result — Hasil pengerjaan ujian mahasiswa saat ini
+router.get('/:id/my-result', jwtMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { id: examId } = req.params;
+    const userId = (req as any).user.id;
+    const userRole = (req as any).user.role;
+
+    const attempt = await db('exam_attempts')
+      .where({ exam_id: examId, student_id: userId })
+      .first();
+
+    if (!attempt) {
+      return res.status(404).json({
+        error: { code: 'ATTEMPT_NOT_FOUND', message: 'Anda belum memiliki riwayat pengerjaan ujian ini' },
+      });
+    }
+
+    const data = await fetchAttemptResultData(attempt.id, userId, userRole);
+    if ('errorStatus' in data) {
+      return res.status(data.errorStatus!).json({
+        error: { code: data.errorCode, message: data.errorMessage },
+      });
+    }
+
+    return res.json(data);
   } catch (error) {
     return res.status(500).json({
       error: { code: 'INTERNAL_ERROR', message: (error as Error).message },

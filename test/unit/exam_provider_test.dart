@@ -1,15 +1,33 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:thereisnocheating/features/exams/data/models/exam_model.dart';
 import 'package:thereisnocheating/features/exams/data/models/question_model.dart';
+import 'package:thereisnocheating/features/exams/data/models/course_model.dart';
 import 'package:thereisnocheating/features/exams/data/repositories/exam_repository.dart';
 import 'package:thereisnocheating/features/exams/presentation/providers/exam_provider.dart';
 
 class MockExamRepository extends ExamRepository {
   List<ExamModel> mockExams = [];
   List<QuestionModel> mockQuestions = [];
+  List<CourseModel> mockCourses = [];
 
   MockExamRepository(this.mockExams, [List<QuestionModel>? questions]) {
     if (questions != null) mockQuestions = questions;
+  }
+
+  @override
+  Future<List<CourseModel>> fetchCourses() async {
+    return List.from(mockCourses);
+  }
+
+  @override
+  Future<CourseModel> createCourse(String code, String name) async {
+    final c = CourseModel(
+      id: 'c-${mockCourses.length + 1}',
+      code: code,
+      name: name,
+    );
+    mockCourses.insert(0, c);
+    return c;
   }
 
   @override
@@ -42,6 +60,17 @@ class MockExamRepository extends ExamRepository {
       body: data['body'] ?? '',
       maxScore: (data['max_score'] as num?)?.toDouble() ?? 10.0,
     );
+  }
+
+  @override
+  Future<void> deleteQuestion(String questionId) async {
+    mockQuestions.removeWhere((q) => q.id == questionId);
+  }
+
+  @override
+  Future<void> deleteQuestionsBatch(List<String> questionIds) async {
+    final idSet = questionIds.toSet();
+    mockQuestions.removeWhere((q) => idSet.contains(q.id));
   }
 }
 
@@ -132,6 +161,54 @@ void main() {
       expect(success, true);
       expect(provider.questions.length, 1);
       expect(provider.questions.first.body, 'Pertanyaan baru');
+    });
+
+    test('deleteQuestion removes question from provider and repository', () async {
+      await provider.createQuestion({
+        'course_id': 'c1',
+        'type': 'mcq',
+        'body': 'Soal akan dihapus',
+        'max_score': 10.0,
+      });
+
+      expect(provider.questions.length, 1);
+      final qId = provider.questions.first.id;
+
+      final success = await provider.deleteQuestion(qId);
+      expect(success, true);
+      expect(provider.questions.isEmpty, true);
+    });
+
+    test('deleteQuestionsBatch removes multiple questions from provider and repository', () async {
+      await provider.createQuestion({
+        'course_id': 'c1',
+        'type': 'essay',
+        'body': 'Soal batch 1',
+        'max_score': 10.0,
+      });
+      await provider.createQuestion({
+        'course_id': 'c1',
+        'type': 'essay',
+        'body': 'Soal batch 2',
+        'max_score': 15.0,
+      });
+
+      expect(provider.questions.length, 2);
+      final ids = provider.questions.map((q) => q.id).toList();
+
+      final success = await provider.deleteQuestionsBatch(ids);
+      expect(success, true);
+      expect(provider.questions.isEmpty, true);
+    });
+
+    test('createCourse adds new course and updates courses list in provider', () async {
+      expect(provider.courses.isEmpty, true);
+      final newCourse = await provider.createCourse('IF4501', 'Pemrograman Aplikasi Mobile');
+      expect(newCourse, isNotNull);
+      expect(newCourse!.code, 'IF4501');
+      expect(newCourse.name, 'Pemrograman Aplikasi Mobile');
+      expect(provider.courses.length, 1);
+      expect(provider.courses.first.id, newCourse.id);
     });
   });
 }

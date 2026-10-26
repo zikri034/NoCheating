@@ -18,6 +18,7 @@ class ExamDetailDialog extends StatelessWidget {
   final VoidCallback? onViewLocation;
   final VoidCallback? onReviewEssay;
   final VoidCallback? onDeleteExam;
+  final VoidCallback? onViewResult;
 
   const ExamDetailDialog({
     super.key,
@@ -32,6 +33,7 @@ class ExamDetailDialog extends StatelessWidget {
     this.onViewLocation,
     this.onReviewEssay,
     this.onDeleteExam,
+    this.onViewResult,
   });
 
   String _formatDateTime(DateTime dt) {
@@ -254,6 +256,51 @@ class ExamDetailDialog extends StatelessWidget {
                           ),
                       ],
                     ),
+                    if (!isLecturer && exam.hasSubmitted) ...[
+                      const SizedBox(height: 14),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: NeoColors.success.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: NeoColors.ink, width: 2),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.check_circle, color: NeoColors.success, size: 28),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'UJIAN TELAH DIKERJAKAN',
+                                    style: TextStyle(
+                                      fontFamily: 'Space Grotesk',
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 13,
+                                      color: NeoColors.ink,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    exam.myAttemptScore != null
+                                        ? 'Nilai Anda: ${exam.myAttemptScore!.toStringAsFixed(1)} (${exam.myAttemptStatus == 'graded' ? 'FINAL' : 'SEMENTARA'})'
+                                        : 'Status: Menunggu finalisasi nilai dosen',
+                                    style: const TextStyle(
+                                      fontFamily: 'Hanken Grotesk',
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 12,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 16),
 
                     // Questions Section
@@ -446,7 +493,21 @@ class ExamDetailDialog extends StatelessWidget {
                       ),
                       const SizedBox(width: 8),
                     ],
-                    if (exam.computedStatus == 'SELESAI')
+                    if (!isLecturer && exam.hasSubmitted)
+                      Expanded(
+                        child: NeoButton(
+                          text: 'LIHAT HASIL UJIAN',
+                          icon: const Icon(Icons.assignment_turned_in, size: 18, color: NeoColors.ink),
+                          fontSize: 13,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                          backgroundColor: NeoColors.success,
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                            onViewResult?.call();
+                          },
+                        ),
+                      )
+                    else if (exam.computedStatus == 'SELESAI')
                       Expanded(
                         child: NeoButton(
                           text: 'UJIAN TELAH SELESAI',

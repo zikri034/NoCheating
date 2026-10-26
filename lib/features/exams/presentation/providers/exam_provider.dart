@@ -174,6 +174,19 @@ class ExamProvider extends ChangeNotifier {
     }
   }
 
+  Future<CourseModel?> createCourse(String code, String name) async {
+    try {
+      final course = await _repository.createCourse(code, name);
+      _courses.insert(0, course);
+      notifyListeners();
+      return course;
+    } catch (e) {
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      notifyListeners();
+      return null;
+    }
+  }
+
   Future<void> loadQuestions({String? courseId, String? search, String? type}) async {
     _isLoadingQuestions = true;
     notifyListeners();
@@ -230,6 +243,35 @@ class ExamProvider extends ChangeNotifier {
     _questions.insertAll(0, created);
     notifyListeners();
     return created;
+  }
+
+  /// Hapus satu butir soal dari bank soal (dosen)
+  Future<bool> deleteQuestion(String questionId) async {
+    try {
+      await _repository.deleteQuestion(questionId);
+      _questions.removeWhere((q) => q.id == questionId);
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Hapus banyak butir soal sekaligus dari bank soal (dosen)
+  Future<bool> deleteQuestionsBatch(List<String> questionIds) async {
+    try {
+      await _repository.deleteQuestionsBatch(questionIds);
+      final idSet = questionIds.toSet();
+      _questions.removeWhere((q) => idSet.contains(q.id));
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      notifyListeners();
+      return false;
+    }
   }
 
 

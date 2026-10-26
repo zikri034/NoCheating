@@ -359,96 +359,113 @@ router.post('/:id/submit', jwtMiddleware, requireRole('student'), async (req: Re
   }
 });
 
+// Helper to fetch attempt result data for student or lecturer
+export const fetchAttemptResultData = async (attemptId: string, userId: string, userRole: string) => {
+  const attempt = await db('exam_attempts')
+    .join('exams', 'exam_attempts.exam_id', 'exams.id')
+    .join('courses', 'exams.course_id', 'courses.id')
+    .join('users', 'exam_attempts.student_id', 'users.id')
+    .where('exam_attempts.id', attemptId)
+    .select(
+      'exam_attempts.*',
+      'exams.title as exam_title',
+      'courses.name as course_name',
+      'courses.code as course_code',
+      'users.name as student_name',
+      'users.nim as student_nim'
+    )
+    .first();
+
+  if (!attempt) {
+    return { errorStatus: 404, errorCode: 'ATTEMPT_NOT_FOUND', errorMessage: 'Hasil ujian tidak ditemukan' };
+  }
+
+  // Authorization: owner student or lecturer
+  if (userRole === 'student' && attempt.student_id !== userId) {
+    return { errorStatus: 403, errorCode: 'FORBIDDEN', errorMessage: 'Anda tidak memiliki akses ke hasil ujian ini' };
+  }
+
+  const rawAnswers = await db('attempt_answers')
+    .join('questions', 'attempt_answers.question_id', 'questions.id')
+    .leftJoin('essay_grades', 'attempt_answers.id', 'essay_grades.answer_id')
+    .where('attempt_answers.attempt_id', attemptId)
+    .select(
+      'attempt_answers.id',
+      'attempt_answers.question_id',
+      'attempt_answers.selected_option',
+      'attempt_answers.answer_text',
+      'questions.type',
+      'questions.body as question_text',
+      'questions.max_score',
+      'essay_grades.ai_score',
+      'essay_grades.ai_json',
+      'essay_grades.confidence',
+      'essay_grades.flags',
+      'essay_grades.final_score as essay_final_score',
+      'essay_grades.status as essay_grade_status',
+      'essay_grades.teacher_comment'
+    );
+
+  const answers = rawAnswers.map((a) => {
+    let aiParsed = null;
+    if (a.ai_json) {
+      aiParsed = typeof a.ai_json === 'string' ? JSON.parse(a.ai_json) : a.ai_json;
+    }
+    let flagsParsed = [];
+    if (a.flags) {
+      flagsParsed = typeof a.flags === 'string' ? JSON.parse(a.flags) : a.flags;
+    }
+
+    const isProvisional = a.type === 'essay' && a.essay_grade_status !== 'finalized';
+
+    return {
+      id: a.id,
+      question_id: a.question_id,
+      selected_option: a.selected_option,
+      answer_text: a.answer_text,
+      type: a.type,
+      question_text: a.question_text,
+      max_score: a.max_score,
+      essay_final_score: a.essay_final_score,
+      essay_ai_score: a.ai_score,
+      essay_grade_status: a.essay_grade_status,
+      is_provisional: isProvisional,
+      ai_breakdown: aiParsed,
+      flags: flagsParsed,
+      teacher_comment: a.teacher_comment,
+    };
+  });
+
+  return {
+    attempt: {
+      ...attempt,
+      has_essay: answers.some((a) => a.type === 'essay'),
+    },
+    exam: {
+      id: attempt.exam_id,
+      title: attempt.exam_title,
+      course_name: attempt.course_name,
+      course_code: attempt.course_code,
+    },
+    answers,
+  };
+};
+
 // GET /api/attempts/:id/result — Hasil ujian & umpan balik
 router.get('/:id/result', jwtMiddleware, async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const userId = (req as any).user.id;
     const userRole = (req as any).user.role;
 
-    const attempt = await db('exam_attempts')
-      .join('exams', 'exam_attempts.exam_id', 'exams.id')
-      .join('courses', 'exams.course_id', 'courses.id')
-      .join('users', 'exam_attempts.student_id', 'users.id')
-      .where('exam_attempts.id', id)
-      .select(
-        'exam_attempts.*',
-        'exams.title as exam_title',
-        'courses.name as course_name',
-        'courses.code as course_code',
-        'users.name as student_name',
-        'users.nim as student_nim'
-      )
-      .first();
-
-    if (!attempt) {
-      return res.status(404).json({
-        error: { code: 'ATTEMPT_NOT_FOUND', message: 'Hasil ujian tidak ditemukan' },
+    const data = await fetchAttemptResultData(id, userId, userRole);
+    if ('errorStatus' in data) {
+      return res.status(data.errorStatus!).json({
+        error: { code: data.errorCode, message: data.errorMessage },
       });
     }
 
-    // Authorization: owner student or lecturer
-    if (userRole === 'student' && attempt.student_id !== userId) {
-      return res.status(403).json({
-        error: { code: 'FORBIDDEN', message: 'Anda tidak memiliki akses ke hasil ujian ini' },
-      });
-    }
-
-    const rawAnswers = await db('attempt_answers')
-      .join('questions', 'attempt_answers.question_id', 'questions.id')
-      .leftJoin('essay_grades', 'attempt_answers.id', 'essay_grades.answer_id')
-      .where('attempt_answers.attempt_id', id)
-      .select(
-        'attempt_answers.id',
-        'attempt_answers.question_id',
-        'attempt_answers.selected_option',
-        'attempt_answers.answer_text',
-        'questions.type',
-        'questions.body as question_text',
-        'questions.max_score',
-        'essay_grades.ai_score',
-        'essay_grades.ai_json',
-        'essay_grades.confidence',
-        'essay_grades.flags',
-        'essay_grades.final_score as essay_final_score',
-        'essay_grades.status as essay_grade_status',
-        'essay_grades.teacher_comment'
-      );
-
-    const answers = rawAnswers.map((a) => {
-      let aiParsed = null;
-      if (a.ai_json) {
-        aiParsed = typeof a.ai_json === 'string' ? JSON.parse(a.ai_json) : a.ai_json;
-      }
-      let flagsParsed = [];
-      if (a.flags) {
-        flagsParsed = typeof a.flags === 'string' ? JSON.parse(a.flags) : a.flags;
-      }
-
-      const isProvisional = a.type === 'essay' && a.essay_grade_status !== 'finalized';
-
-      return {
-        id: a.id,
-        question_id: a.question_id,
-        selected_option: a.selected_option,
-        answer_text: a.answer_text,
-        type: a.type,
-        question_text: a.question_text,
-        max_score: a.max_score,
-        essay_final_score: a.essay_final_score,
-        essay_ai_score: a.ai_score,
-        essay_grade_status: a.essay_grade_status,
-        is_provisional: isProvisional,
-        ai_breakdown: aiParsed,
-        flags: flagsParsed,
-        teacher_comment: a.teacher_comment,
-      };
-    });
-
-    return res.json({
-      attempt,
-      answers,
-    });
+    return res.json(data);
   } catch (error) {
     return res.status(500).json({
       error: { code: 'INTERNAL_ERROR', message: (error as Error).message },

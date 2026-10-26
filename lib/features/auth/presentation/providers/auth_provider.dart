@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../../domain/models/user.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../../../core/services/biometric_service.dart';
+import '../../../../core/services/notification_service.dart';
 import '../../../../core/utils/device_utils.dart';
 
 class AuthProvider with ChangeNotifier {
@@ -120,6 +121,7 @@ class AuthProvider with ChangeNotifier {
   Future<void> logout() async {
     _setLoading(true);
     try {
+      await NotificationService.instance.cancelAllReminders();
       await _authRepository.logout();
       await _setUnauthenticated();
     } catch (e) {

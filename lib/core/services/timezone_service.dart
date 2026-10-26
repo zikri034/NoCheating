@@ -26,6 +26,25 @@ class TimezoneService {
   static void initialize() {
     if (!_initialized) {
       tz_data.initializeTimeZones();
+      // Set local location to match device timezone (PRD F15)
+      final offsetHours = DateTime.now().timeZoneOffset.inHours;
+      String locationName = 'Asia/Jakarta'; // Default WIB (UTC+7)
+      if (offsetHours == 8) {
+        locationName = 'Asia/Makassar'; // WITA (UTC+8)
+      } else if (offsetHours == 9) {
+        locationName = 'Asia/Jayapura'; // WIT (UTC+9)
+      } else if (offsetHours == 0) {
+        locationName = 'UTC';
+      } else if (offsetHours == 1) {
+        locationName = 'Europe/London';
+      }
+      try {
+        tz.setLocalLocation(tz.getLocation(locationName));
+      } catch (_) {
+        try {
+          tz.setLocalLocation(tz.getLocation('Asia/Jakarta'));
+        } catch (_) {}
+      }
       _initialized = true;
     }
   }

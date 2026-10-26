@@ -6,6 +6,7 @@ import '../../../../core/widgets/neo_button.dart';
 import '../../../../core/widgets/neo_tag.dart';
 import '../../../../core/widgets/neo_text_field.dart';
 import '../providers/exam_runner_provider.dart';
+import '../../data/repositories/attempt_repository.dart';
 import 'exam_result_screen.dart';
 
 class ExamRunnerScreen extends StatefulWidget {
@@ -403,6 +404,28 @@ class _ExamRunnerScreenState extends State<ExamRunnerScreen> with WidgetsBinding
                     style: const TextStyle(fontFamily: 'Hanken Grotesk', fontSize: 14),
                   ),
                   const SizedBox(height: 16),
+                  if (runner.errorMessage!.contains('sudah diselesaikan') || runner.errorMessage!.contains('ALREADY_FINISHED')) ...[
+                    NeoButton(
+                      text: 'LIHAT HASIL UJIAN',
+                      backgroundColor: NeoColors.success,
+                      icon: const Icon(Icons.assignment_turned_in, size: 18, color: NeoColors.ink),
+                      onPressed: () async {
+                        try {
+                          final res = await AttemptRepository().fetchExamResultByExamId(widget.examId);
+                          if (!context.mounted) return;
+                          Navigator.of(context).pushReplacement(
+                            MaterialPageRoute(
+                              builder: (_) => ExamResultScreen(
+                                result: res,
+                                onBackToExams: () => Navigator.of(context).pop(),
+                              ),
+                            ),
+                          );
+                        } catch (_) {}
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                  ],
                   NeoButton(
                     text: 'KEMBALI',
                     onPressed: () => Navigator.of(context).pop(),

@@ -17,6 +17,7 @@ class ExamCard extends StatelessWidget {
   final VoidCallback? onMonitor;
   final VoidCallback? onViewLocation;
   final VoidCallback? onReviewEssay;
+  final VoidCallback? onViewResult;
 
   const ExamCard({
     super.key,
@@ -28,6 +29,7 @@ class ExamCard extends StatelessWidget {
     this.onMonitor,
     this.onViewLocation,
     this.onReviewEssay,
+    this.onViewResult,
   });
 
   String _formatDateTime(DateTime dt) {
@@ -216,6 +218,14 @@ class ExamCard extends StatelessWidget {
                       variant: NeoTagVariant.primary,
                     ),
                   ),
+                if (!isLecturer && exam.hasSubmitted)
+                  NeoTag(
+                    label: exam.myAttemptScore != null
+                        ? 'NILAI: ${exam.myAttemptScore!.toStringAsFixed(0)}'
+                        : 'SUDAH DIKERJAKAN',
+                    icon: Icons.stars,
+                    variant: NeoTagVariant.success,
+                  ),
               ],
             ),
             const SizedBox(height: 16),
@@ -224,7 +234,16 @@ class ExamCard extends StatelessWidget {
             Row(
               children: [
                 if (!isLecturer) ...[
-                  if (exam.isEnrolled)
+                  if (exam.hasSubmitted)
+                    Expanded(
+                      child: NeoButton(
+                        text: 'LIHAT HASIL',
+                        icon: const Icon(Icons.assignment_turned_in, size: 16, color: NeoColors.ink),
+                        backgroundColor: NeoColors.success,
+                        onPressed: onViewResult ?? onTap,
+                      ),
+                    )
+                  else if (exam.isEnrolled)
                     Expanded(
                       child: NeoButton(
                         text: 'KERJAKAN',

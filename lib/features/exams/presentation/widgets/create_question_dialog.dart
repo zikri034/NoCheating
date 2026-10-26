@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../../core/theme/neo_theme.dart';
 import '../../../../core/widgets/neo_button.dart';
 import '../../../../core/widgets/neo_snackbar.dart';
 import '../../../../core/widgets/neo_text_field.dart';
 import '../../data/models/course_model.dart';
+import '../providers/exam_provider.dart';
 
 class CreateQuestionDialog extends StatefulWidget {
   final List<CourseModel> courses;
+  final String? initialCourseId;
   final Future<bool> Function(Map<String, dynamic> data) onSubmit;
 
   const CreateQuestionDialog({
     super.key,
     required this.courses,
+    this.initialCourseId,
     required this.onSubmit,
   });
 
@@ -23,6 +27,11 @@ class _CreateQuestionDialogState extends State<CreateQuestionDialog> {
   final _formKey = GlobalKey<FormState>();
   String? _selectedCourseId;
   String _selectedType = 'mcq';
+
+  // New course controllers
+  bool _isCreatingNewCourse = false;
+  final _newCourseCodeController = TextEditingController();
+  final _newCourseNameController = TextEditingController();
 
   final _bodyController = TextEditingController();
   final _scoreController = TextEditingController(text: '10');
@@ -45,13 +54,20 @@ class _CreateQuestionDialogState extends State<CreateQuestionDialog> {
   @override
   void initState() {
     super.initState();
-    if (widget.courses.isNotEmpty) {
+    if (widget.courses.isEmpty) {
+      _isCreatingNewCourse = true;
+    } else if (widget.initialCourseId != null &&
+        widget.courses.any((c) => c.id == widget.initialCourseId)) {
+      _selectedCourseId = widget.initialCourseId;
+    } else if (widget.courses.isNotEmpty) {
       _selectedCourseId = widget.courses.first.id;
     }
   }
 
   @override
   void dispose() {
+    _newCourseCodeController.dispose();
+    _newCourseNameController.dispose();
     _bodyController.dispose();
     _scoreController.dispose();
     for (final c in _optionControllers) {
@@ -64,13 +80,42 @@ class _CreateQuestionDialogState extends State<CreateQuestionDialog> {
 
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedCourseId == null) {
-      NeoSnackbar.showError(
-        context,
-        title: 'MATA KULIAH KOSONG',
-        message: 'Pilih mata kuliah terlebih dahulu sebelum menyimpan.',
-      );
-      return;
+
+    if (_isCreatingNewCourse) {
+      final code = _newCourseCodeController.text.trim();
+      final name = _newCourseNameController.text.trim();
+      if (code.isEmpty || name.isEmpty) {
+        NeoSnackbar.showError(
+          context,
+          title: 'DATA MATERI KURANG',
+          message: 'Silakan isi Kode Materi dan Nama Materi baru.',
+        );
+        return;
+      }
+
+      setState(() => _isSubmitting = true);
+      final examProv = context.read<ExamProvider>();
+      final newCourse = await examProv.createCourse(code, name);
+      if (!mounted) return;
+      if (newCourse == null) {
+        setState(() => _isSubmitting = false);
+        NeoSnackbar.showError(
+          context,
+          title: 'GAGAL MEMBUAT MATERI',
+          message: examProv.errorMessage ?? 'Gagal membuat materi baru.',
+        );
+        return;
+      }
+      _selectedCourseId = newCourse.id;
+    } else {
+      if (_selectedCourseId == null) {
+        NeoSnackbar.showError(
+          context,
+          title: 'MATA KULIAH KOSONG',
+          message: 'Pilih mata kuliah terlebih dahulu sebelum menyimpan.',
+        );
+        return;
+      }
     }
 
     final score = double.tryParse(_scoreController.text) ?? 10.0;
@@ -194,48 +239,149 @@ class _CreateQuestionDialogState extends State<CreateQuestionDialog> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Mata Kuliah Dropdown
-                      const Text(
-                        'MATA KULIAH',
-                        style: TextStyle(
-                          fontFamily: 'Space Grotesk',
-                          fontWeight: FontWeight.w800,
-                          fontSize: 12,
-                          color: NeoColors.ink,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: NeoColors.bg,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: NeoColors.ink, width: 2),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: _selectedCourseId,
-                            isExpanded: true,
-                            dropdownColor: NeoColors.surface,
-                            hint: const Text('Pilih Mata Kuliah'),
-                            items: widget.courses.map((c) {
-                              return DropdownMenuItem<String>(
-                                value: c.id,
-                                child: Text(
-                                  '${c.code} — ${c.name}',
-                                  style: const TextStyle(
-                                    fontFamily: 'Space Grotesk',
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 13,
+                      // Materi Selector & Mode Switcher
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'MATERI / MATA KULIAH',
+                            style: TextStyle(
+                              fontFamily: 'Space Grotesk',
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                              color: NeoColors.ink,
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _isCreatingNewCourse = !_isCreatingNewCourse;
+                              });
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: _isCreatingNewCourse ? NeoColors.surface : NeoColors.primary,
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: NeoColors.ink, width: 1.5),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    _isCreatingNewCourse ? Icons.list_alt : Icons.add_circle_outline,
+                                    size: 13,
                                     color: NeoColors.ink,
                                   ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    _isCreatingNewCourse ? 'PILIH YANG ADA' : '+ BUAT MATERI BARU',
+                                    style: const TextStyle(
+                                      fontFamily: 'Space Grotesk',
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 10,
+                                      color: NeoColors.ink,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      if (!_isCreatingNewCourse) ...[
+                        Builder(
+                          builder: (context) {
+                            final provCourses = context.watch<ExamProvider>().courses;
+                            final coursesList = provCourses.isNotEmpty ? provCourses : widget.courses;
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              decoration: BoxDecoration(
+                                color: NeoColors.bg,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: NeoColors.ink, width: 2),
+                              ),
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<String>(
+                                  value: coursesList.any((c) => c.id == _selectedCourseId)
+                                      ? _selectedCourseId
+                                      : (coursesList.isNotEmpty ? coursesList.first.id : null),
+                                  isExpanded: true,
+                                  dropdownColor: NeoColors.surface,
+                                  hint: const Text('Pilih Mata Kuliah'),
+                                  items: coursesList.map((c) {
+                                    return DropdownMenuItem<String>(
+                                      value: c.id,
+                                      child: Text(
+                                        '${c.code} — ${c.name}',
+                                        style: const TextStyle(
+                                          fontFamily: 'Space Grotesk',
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 13,
+                                          color: NeoColors.ink,
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                  onChanged: (val) => setState(() => _selectedCourseId = val),
                                 ),
-                              );
-                            }).toList(),
-                            onChanged: (val) => setState(() => _selectedCourseId = val),
+                              ),
+                            );
+                          },
+                        ),
+                      ] else ...[
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: NeoColors.secondary.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: NeoColors.ink, width: 2),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.auto_stories, size: 16, color: NeoColors.ink),
+                                  const SizedBox(width: 6),
+                                  const Text(
+                                    'TAMBAH MATERI BARU',
+                                    style: TextStyle(
+                                      fontFamily: 'Space Grotesk',
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 12,
+                                      color: NeoColors.ink,
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  Text(
+                                    'Otomatis dibuat & disimpan',
+                                    style: TextStyle(
+                                      fontFamily: 'Hanken Grotesk',
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 10,
+                                      color: NeoColors.ink.withValues(alpha: 0.7),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              NeoTextField(
+                                label: 'KODE MATERI (CONTOH: IF4501)',
+                                controller: _newCourseCodeController,
+                                hintText: 'Masukkan kode materi...',
+                              ),
+                              const SizedBox(height: 8),
+                              NeoTextField(
+                                label: 'NAMA MATERI / TOPIK SOAL',
+                                controller: _newCourseNameController,
+                                hintText: 'Contoh: Pemrograman Mobile / Jaringan Komputer',
+                              ),
+                            ],
                           ),
                         ),
-                      ),
+                      ],
                       const SizedBox(height: 14),
 
                       // Tipe Soal Segment

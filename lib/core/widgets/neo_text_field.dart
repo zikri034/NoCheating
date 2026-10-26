@@ -10,6 +10,7 @@ class NeoTextField extends StatelessWidget {
   final Widget? prefixIcon;
   final Widget? suffixIcon;
   final ValueChanged<String>? onChanged;
+  final FormFieldValidator<String>? validator;
   final int maxLines;
 
   const NeoTextField({
@@ -22,6 +23,7 @@ class NeoTextField extends StatelessWidget {
     this.prefixIcon,
     this.suffixIcon,
     this.onChanged,
+    this.validator,
     this.maxLines = 1,
   });
 
@@ -47,6 +49,7 @@ class NeoTextField extends StatelessWidget {
           obscureText: isPassword,
           keyboardType: keyboardType,
           onChanged: onChanged,
+          validator: validator,
           maxLines: maxLines,
           decoration: InputDecoration(
             hintText: hintText,

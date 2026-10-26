@@ -34,9 +34,9 @@ const createQuestionSchema = z.object({
 // GET /api/questions — Bank soal dengan pencarian, filter, dan pagination (dosen)
 router.get('/', jwtMiddleware, requireRole('lecturer'), async (req: Request, res: Response) => {
   try {
-    const { course_id, type, search, page = '1', limit = '20' } = req.query;
+    const { course_id, type, search, page = '1', limit } = req.query;
     const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
-    const pageSize = Math.min(50, Math.max(1, parseInt(limit as string, 10) || 20));
+    const pageSize = limit ? Math.min(1000, Math.max(1, parseInt(limit as string, 10) || 1000)) : 1000;
     const offset = (pageNum - 1) * pageSize;
 
     let query = db('questions')
@@ -269,5 +269,89 @@ router.post(
   }
 );
 
+
+// DELETE /api/questions/:id — Hapus satu butir soal dari bank soal (dosen)
+router.delete('/:id', jwtMiddleware, requireRole('lecturer'), async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const question = await db('questions').where({ id }).first();
+    if (!question) {
+      return res.status(404).json({
+        error: { code: 'QUESTION_NOT_FOUND', message: 'Butir soal tidak ditemukan' },
+      });
+    }
+
+    // Periksa apakah butir soal sudah pernah dijawab oleh mahasiswa dalam riwayat ujian
+    const answeredCount = await db('attempt_answers').where({ question_id: id }).count('id as total').first();
+    if (parseInt((answeredCount as any)?.total || '0', 10) > 0) {
+      return res.status(400).json({
+        error: {
+          code: 'QUESTION_IN_USE',
+          message: 'Soal tidak dapat dihapus karena sudah memiliki riwayat pengerjaan oleh mahasiswa.',
+        },
+      });
+    }
+
+    await db.transaction(async (trx) => {
+      // Hapus alokasi soal pada ujian yang belum pernah dikerjakan
+      await trx('exam_questions').where({ question_id: id }).del();
+      await trx('questions').where({ id }).del();
+    });
+
+    return res.json({
+      success: true,
+      message: 'Butir soal berhasil dihapus dari bank soal',
+    });
+  } catch (error) {
+    return res.status(500).json({
+      error: { code: 'INTERNAL_ERROR', message: (error as Error).message },
+    });
+  }
+});
+
+// POST /api/questions/batch-delete — Hapus banyak butir soal sekaligus dari bank soal (dosen)
+router.post('/batch-delete', jwtMiddleware, requireRole('lecturer'), async (req: Request, res: Response) => {
+  try {
+    const { question_ids } = z.object({
+      question_ids: z.array(z.string().uuid()).min(1, 'Pilih minimal satu soal untuk dihapus'),
+    }).parse(req.body);
+
+    // Periksa apakah ada soal yang sudah memiliki riwayat jawaban
+    const inUse = await db('attempt_answers')
+      .whereIn('question_id', question_ids)
+      .select('question_id')
+      .distinct();
+
+    if (inUse.length > 0) {
+      return res.status(400).json({
+        error: {
+          code: 'QUESTION_IN_USE',
+          message: `${inUse.length} butir soal tidak dapat dihapus karena sudah memiliki riwayat pengerjaan oleh mahasiswa.`,
+        },
+      });
+    }
+
+    const deletedCount = await db.transaction(async (trx) => {
+      await trx('exam_questions').whereIn('question_id', question_ids).del();
+      return await trx('questions').whereIn('id', question_ids).del();
+    });
+
+    return res.json({
+      success: true,
+      count: deletedCount,
+      message: `${deletedCount} butir soal berhasil dihapus dari bank soal`,
+    });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        error: { code: 'VALIDATION_ERROR', message: error.issues[0].message },
+      });
+    }
+    return res.status(500).json({
+      error: { code: 'INTERNAL_ERROR', message: (error as Error).message },
+    });
+  }
+});
 
 export default router;

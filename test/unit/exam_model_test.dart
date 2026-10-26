@@ -41,6 +41,32 @@ void main() {
       expect(serialized['fee_idr'], 50000);
     });
 
+    test('student attempt fields and hasSubmitted evaluation (F04/F07)', () {
+      final json = {
+        'id': '11111111-1111-1111-1111-111111111111',
+        'course_id': '22222222-2222-2222-2222-222222222222',
+        'title': 'Ujian Selesai',
+        'start_at': '2026-10-18T09:00:00.000Z',
+        'end_at': '2026-10-18T11:00:00.000Z',
+        'duration_min': 120,
+        'my_attempt_id': 'att-123',
+        'my_attempt_status': 'submitted',
+        'my_attempt_score': '85.5',
+      };
+
+      final exam = ExamModel.fromJson(json);
+      expect(exam.myAttemptId, 'att-123');
+      expect(exam.myAttemptStatus, 'submitted');
+      expect(exam.myAttemptScore, 85.5);
+      expect(exam.hasSubmitted, isTrue);
+
+      final gradedExam = exam.copyWith(myAttemptStatus: 'graded');
+      expect(gradedExam.hasSubmitted, isTrue);
+
+      final unsubmittedExam = exam.copyWith(myAttemptStatus: 'in_progress');
+      expect(unsubmittedExam.hasSubmitted, isFalse);
+    });
+
     test('computedStatus calculates status correctly', () {
       final now = DateTime.now();
 

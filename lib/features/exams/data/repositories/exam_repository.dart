@@ -64,6 +64,16 @@ class ExamRepository {
     }
   }
 
+  Future<Map<String, dynamic>> fetchMyExamResult(String examId) async {
+    try {
+      final response = await _dio.get('/exams/$examId/my-result');
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      final msg = e.response?.data?['error']?['message'] ?? e.message ?? 'Gagal memuat hasil ujian';
+      throw Exception(msg);
+    }
+  }
+
   Future<ExamModel> createExam(Map<String, dynamic> data) async {
     try {
       final response = await _dio.post('/exams', data: data);
@@ -94,12 +104,27 @@ class ExamRepository {
     }
   }
 
+  Future<CourseModel> createCourse(String code, String name) async {
+    try {
+      final response = await _dio.post('/courses', data: {
+        'code': code.trim(),
+        'name': name.trim(),
+      });
+      return CourseModel.fromJson(response.data['course'] as Map<String, dynamic>);
+    } on DioException catch (e) {
+      final msg = e.response?.data?['error']?['message'] ?? e.message ?? 'Gagal membuat mata kuliah / materi';
+      throw Exception(msg);
+    }
+  }
+
   Future<List<QuestionModel>> fetchQuestions({
     String? courseId,
     String? search,
     String? type,
   }) async {
-    final queryParams = <String, dynamic>{};
+    final queryParams = <String, dynamic>{
+      'limit': 1000,
+    };
     if (courseId != null && courseId.isNotEmpty) queryParams['course_id'] = courseId;
     if (search != null && search.trim().isNotEmpty) queryParams['search'] = search.trim();
     if (type != null && type.isNotEmpty) queryParams['type'] = type;
@@ -230,6 +255,28 @@ class ExamRepository {
       return list.map((q) => QuestionModel.fromJson(Map<String, dynamic>.from(q as Map))).toList();
     } on DioException catch (e) {
       final msg = e.response?.data?['error']?['message'] ?? e.message ?? 'Gagal menyimpan batch soal';
+      throw Exception(msg);
+    }
+  }
+
+  /// Hapus satu butir soal dari bank soal (dosen)
+  Future<void> deleteQuestion(String questionId) async {
+    try {
+      await _dio.delete('/questions/$questionId');
+    } on DioException catch (e) {
+      final msg = e.response?.data?['error']?['message'] ?? e.message ?? 'Gagal menghapus butir soal';
+      throw Exception(msg);
+    }
+  }
+
+  /// Hapus banyak butir soal sekaligus dari bank soal (dosen)
+  Future<void> deleteQuestionsBatch(List<String> questionIds) async {
+    try {
+      await _dio.post('/questions/batch-delete', data: {
+        'question_ids': questionIds,
+      });
+    } on DioException catch (e) {
+      final msg = e.response?.data?['error']?['message'] ?? e.message ?? 'Gagal menghapus butir soal';
       throw Exception(msg);
     }
   }

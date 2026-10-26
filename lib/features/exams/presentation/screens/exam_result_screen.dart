@@ -25,13 +25,19 @@ class ExamResultScreen extends StatelessWidget {
     final essayAnswers = answers.where((a) => a['type'] == 'essay').toList();
 
     return PopScope(
-      canPop: false,
+      canPop: true,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) onBackToExams();
+      },
       child: Scaffold(
         backgroundColor: NeoColors.bg,
         appBar: AppBar(
           backgroundColor: NeoColors.primary,
           elevation: 0,
-          automaticallyImplyLeading: false,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: NeoColors.ink),
+            onPressed: onBackToExams,
+          ),
           title: const Text(
             'HASIL UJIAN',
             style: TextStyle(

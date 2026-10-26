@@ -12,6 +12,7 @@ import '../../../../core/widgets/neo_button.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../data/models/exam_model.dart';
 import '../../data/models/question_model.dart';
+import '../../data/models/course_model.dart';
 import '../providers/exam_provider.dart';
 import '../widgets/exam_card.dart';
 import '../widgets/exam_detail_dialog.dart';
@@ -25,6 +26,33 @@ import 'exam_runner_screen.dart';
 import 'exam_location_screen.dart';
 import 'exam_monitor_screen.dart';
 import 'essay_review_screen.dart';
+import 'exam_result_screen.dart';
+import '../../data/repositories/exam_repository.dart';
+
+class _BankListItem {
+  final bool isHeader;
+  final String? courseTitle;
+  final String? courseId;
+  final List<String>? groupQuestionIds;
+  final QuestionModel? question;
+  final int? questionNumber;
+
+  _BankListItem.header({
+    required this.courseTitle,
+    required this.courseId,
+    required this.groupQuestionIds,
+  })  : isHeader = true,
+        question = null,
+        questionNumber = null;
+
+  _BankListItem.question({
+    required this.question,
+    required this.questionNumber,
+  })  : isHeader = false,
+        courseTitle = null,
+        courseId = null,
+        groupQuestionIds = null;
+}
 
 class ExamsScreen extends StatefulWidget {
   const ExamsScreen({super.key});
@@ -41,6 +69,7 @@ class _ExamsScreenState extends State<ExamsScreen> {
 
   int _selectedLecturerTab = 0; // 0 = Ujian, 1 = Bank Soal
   String _selectedQuestionType = 'all'; // all, mcq, essay
+  String _selectedQuestionCourseId = 'all'; // 'all' or course.id
   final Set<String> _selectedBankQuestionIds = {};
 
   @override
@@ -91,8 +120,51 @@ class _ExamsScreenState extends State<ExamsScreen> {
                 _showAssignQuestionsDialog(examId);
               }
             : null,
+        onViewResult: () => _viewExamResult(examId, detail['exam']?.myAttemptId),
       ),
     );
+  }
+
+  Future<void> _viewExamResult(String examId, [String? attemptId]) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: CircularProgressIndicator(color: NeoColors.ink),
+      ),
+    );
+
+    try {
+      final attemptRepo = AttemptRepository();
+      Map<String, dynamic> result;
+      if (attemptId != null && attemptId.isNotEmpty) {
+        result = await attemptRepo.fetchAttemptResult(attemptId);
+      } else {
+        final examRepo = ExamRepository();
+        result = await examRepo.fetchMyExamResult(examId);
+      }
+
+      if (!mounted) return;
+      Navigator.of(context).pop(); // dismiss loading
+
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ExamResultScreen(
+            result: result,
+            onBackToExams: () => Navigator.of(context).pop(),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context).pop(); // dismiss loading
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: NeoColors.danger,
+          content: Text('Gagal memuat hasil ujian: ${e.toString().replaceAll('Exception: ', '')}'),
+        ),
+      );
+    }
   }
 
   Future<void> _startExam(String examId) async {
@@ -331,7 +403,7 @@ class _ExamsScreenState extends State<ExamsScreen> {
     final exams = examProv.exams;
 
     if (exams.isEmpty) {
-      NeoSnackbar.showError(
+      NeoSnackbar.showWarning(
         context,
         title: 'BELUM ADA UJIAN',
         message: 'Buat ujian terlebih dahulu sebelum memasukkan butir soal.',
@@ -339,17 +411,36 @@ class _ExamsScreenState extends State<ExamsScreen> {
       return;
     }
 
+    final selectedQuestions = examProv.questions.where((q) => questionIds.contains(q.id)).toList();
+    final questionCourseIds = selectedQuestions.map((q) => q.courseId).where((id) => id.isNotEmpty).toSet();
+    final questionCourseNames = selectedQuestions
+        .map((q) => '${q.courseCode != null ? "[${q.courseCode}] " : ""}${q.courseName ?? "Materi"}')
+        .toSet();
+
+    // Smart default: find an exam that matches the selected questions' course
     String selectedExamId = exams.first.id;
+    if (questionCourseIds.length == 1) {
+      final matchingExam = exams.where((e) => e.courseId == questionCourseIds.first).firstOrNull;
+      if (matchingExam != null) {
+        selectedExamId = matchingExam.id;
+      }
+    }
 
     showDialog(
       context: context,
       builder: (dialogCtx) => StatefulBuilder(
         builder: (innerCtx, setDialogState) {
+          final currentExam = exams.firstWhere((e) => e.id == selectedExamId, orElse: () => exams.first);
+          final isMismatch = questionCourseIds.isNotEmpty &&
+              questionCourseIds.length == 1 &&
+              currentExam.courseId != questionCourseIds.first;
+          final isMulti = questionCourseIds.length > 1;
+
           return Dialog(
             backgroundColor: Colors.transparent,
             insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
             child: Container(
-              constraints: const BoxConstraints(maxWidth: 480),
+              constraints: const BoxConstraints(maxWidth: 500),
               decoration: BoxDecoration(
                 color: NeoColors.surface,
                 borderRadius: BorderRadius.circular(16),
@@ -374,6 +465,8 @@ class _ExamsScreenState extends State<ExamsScreen> {
                     ),
                     child: Row(
                       children: [
+                        const Icon(Icons.playlist_add, color: NeoColors.ink, size: 22),
+                        const SizedBox(width: 8),
                         const Expanded(
                           child: Text(
                             'MASUKKAN SOAL KE UJIAN',
@@ -405,6 +498,7 @@ class _ExamsScreenState extends State<ExamsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // Selected questions & Materi summary
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
@@ -412,21 +506,56 @@ class _ExamsScreenState extends State<ExamsScreen> {
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(color: NeoColors.ink, width: 2),
                           ),
-                          child: Row(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Icon(Icons.check_box_outlined, color: NeoColors.ink, size: 20),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  '${questionIds.length} butir soal dipilih untuk dialokasikan.',
-                                  style: const TextStyle(
-                                    fontFamily: 'Hanken Grotesk',
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 13,
-                                    color: NeoColors.ink,
+                              Row(
+                                children: [
+                                  const Icon(Icons.check_box_outlined, color: NeoColors.ink, size: 20),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      '${questionIds.length} butir soal dipilih untuk dialokasikan.',
+                                      style: const TextStyle(
+                                        fontFamily: 'Hanken Grotesk',
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 13,
+                                        color: NeoColors.ink,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (questionCourseNames.isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: NeoColors.surface,
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: NeoColors.ink, width: 1),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.school, size: 12, color: NeoColors.ink),
+                                      const SizedBox(width: 4),
+                                      Flexible(
+                                        child: Text(
+                                          'Materi Soal: ${questionCourseNames.join(", ")}',
+                                          style: const TextStyle(
+                                            fontFamily: 'Space Grotesk',
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 11,
+                                            color: NeoColors.ink,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ),
+                              ],
                             ],
                           ),
                         ),
@@ -442,7 +571,7 @@ class _ExamsScreenState extends State<ExamsScreen> {
                         ),
                         const SizedBox(height: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                           decoration: BoxDecoration(
                             color: NeoColors.surface,
                             borderRadius: BorderRadius.circular(8),
@@ -453,17 +582,58 @@ class _ExamsScreenState extends State<ExamsScreen> {
                               isExpanded: true,
                               value: selectedExamId,
                               items: exams.map((ex) {
+                                final isCourseMatch = questionCourseIds.contains(ex.courseId);
                                 return DropdownMenuItem<String>(
                                   value: ex.id,
-                                  child: Text(
-                                    ex.title,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontFamily: 'Hanken Grotesk',
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 14,
-                                      color: NeoColors.ink,
-                                    ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              ex.title,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontFamily: 'Hanken Grotesk',
+                                                fontWeight: FontWeight.w700,
+                                                fontSize: 13,
+                                                color: NeoColors.ink,
+                                              ),
+                                            ),
+                                          ),
+                                          if (isCourseMatch)
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                              decoration: BoxDecoration(
+                                                color: NeoColors.success,
+                                                borderRadius: BorderRadius.circular(4),
+                                                border: Border.all(color: NeoColors.ink, width: 1),
+                                              ),
+                                              child: const Text(
+                                                'SESUAI',
+                                                style: TextStyle(
+                                                  fontFamily: 'Space Mono',
+                                                  fontSize: 9,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: NeoColors.ink,
+                                                ),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                      Text(
+                                        '${ex.courseCode != null ? "[${ex.courseCode}] " : ""}${ex.courseName ?? "Materi Umum"}',
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontFamily: 'Space Grotesk',
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 11,
+                                          color: NeoColors.muted,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 );
                               }).toList(),
@@ -475,6 +645,63 @@ class _ExamsScreenState extends State<ExamsScreen> {
                             ),
                           ),
                         ),
+
+                        // Mismatch or Multi-Course Warnings
+                        if (isMismatch) ...[
+                          Container(
+                            margin: const EdgeInsets.only(top: 12),
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: NeoColors.warning.withValues(alpha: 0.3),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: NeoColors.ink, width: 1.5),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.warning_amber_rounded, size: 20, color: NeoColors.ink),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Perhatian: Materi ujian (${currentExam.courseName}) berbeda dari materi butir soal (${questionCourseNames.first}).',
+                                    style: const TextStyle(
+                                      fontFamily: 'Hanken Grotesk',
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: NeoColors.ink,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ] else if (isMulti) ...[
+                          Container(
+                            margin: const EdgeInsets.only(top: 12),
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: NeoColors.secondary.withValues(alpha: 0.3),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: NeoColors.ink, width: 1.5),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.info_outline, size: 20, color: NeoColors.ink),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Catatan: Soal yang dipilih berasal dari ${questionCourseIds.length} materi berbeda.',
+                                    style: const TextStyle(
+                                      fontFamily: 'Hanken Grotesk',
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: NeoColors.ink,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -531,7 +758,9 @@ class _ExamsScreenState extends State<ExamsScreen> {
   void _showExtractQuestionsDialog() {
     showDialog(
       context: context,
-      builder: (_) => const ExtractQuestionsDialog(),
+      builder: (_) => ExtractQuestionsDialog(
+        initialCourseId: _selectedQuestionCourseId != 'all' ? _selectedQuestionCourseId : null,
+      ),
     ).then((_) {
       if (mounted) {
         context.read<ExamProvider>().loadQuestions();
@@ -545,6 +774,7 @@ class _ExamsScreenState extends State<ExamsScreen> {
       context: context,
       builder: (_) => CreateQuestionDialog(
         courses: examProv.courses,
+        initialCourseId: _selectedQuestionCourseId != 'all' ? _selectedQuestionCourseId : null,
         onSubmit: (data) async {
           final success = await examProv.createQuestion(data);
           if (mounted) {
@@ -568,12 +798,170 @@ class _ExamsScreenState extends State<ExamsScreen> {
     );
   }
 
+  void _showCreateCourseDialog() {
+    final codeCtrl = TextEditingController();
+    final nameCtrl = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    bool isSaving = false;
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 460),
+              decoration: BoxDecoration(
+                color: NeoColors.surface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: NeoColors.ink, width: 3),
+                boxShadow: const [
+                  BoxShadow(
+                    color: NeoColors.ink,
+                    offset: Offset(6, 6),
+                    blurRadius: 0,
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Header
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: const BoxDecoration(
+                      color: NeoColors.primary,
+                      borderRadius: BorderRadius.vertical(top: Radius.circular(13)),
+                      border: Border(bottom: BorderSide(color: NeoColors.ink, width: 3)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.category_outlined, color: NeoColors.ink, size: 20),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            'TAMBAH MATERI BARU',
+                            style: TextStyle(
+                              fontFamily: 'Space Grotesk',
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                              color: NeoColors.ink,
+                            ),
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () => Navigator.of(dialogCtx).pop(),
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: NeoColors.surface,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: NeoColors.ink, width: 2),
+                            ),
+                            child: const Icon(Icons.close, size: 16, color: NeoColors.ink),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Form Body
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Form(
+                      key: formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          NeoTextField(
+                            label: 'KODE MATERI (CONTOH: IF4501)',
+                            controller: codeCtrl,
+                            hintText: 'Masukkan kode unik materi...',
+                            validator: (v) {
+                              if (v == null || v.trim().isEmpty) return 'Kode materi tidak boleh kosong';
+                              if (v.trim().length < 2) return 'Minimal 2 karakter';
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                          NeoTextField(
+                            label: 'NAMA MATERI / MATA KULIAH',
+                            controller: nameCtrl,
+                            hintText: 'Contoh: Pemrograman Aplikasi Mobile',
+                            validator: (v) {
+                              if (v == null || v.trim().isEmpty) return 'Nama materi tidak boleh kosong';
+                              if (v.trim().length < 2) return 'Minimal 2 karakter';
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 18),
+                          NeoButton(
+                            text: isSaving ? 'MENYIMPAN...' : 'SIMPAN MATERI',
+                            backgroundColor: NeoColors.secondary,
+                            icon: const Icon(Icons.check, size: 18, color: NeoColors.ink),
+                            onPressed: isSaving ? null : () async {
+                              if (!formKey.currentState!.validate()) return;
+                              setDialogState(() => isSaving = true);
+
+                              final examProv = context.read<ExamProvider>();
+                              final created = await examProv.createCourse(
+                                codeCtrl.text.trim(),
+                                nameCtrl.text.trim(),
+                              );
+
+                              if (!dialogCtx.mounted) return;
+                              if (created != null) {
+                                Navigator.of(dialogCtx).pop();
+                                if (mounted) {
+                                  setState(() {
+                                    _selectedQuestionCourseId = created.id;
+                                  });
+                                  NeoSnackbar.showSuccess(
+                                    context,
+                                    title: 'MATERI BERHASIL DIBUAT',
+                                    message: 'Materi [${created.code}] ${created.name} berhasil ditambahkan!',
+                                  );
+                                }
+                              } else {
+                                setDialogState(() => isSaving = false);
+                                NeoSnackbar.showError(
+                                  dialogCtx,
+                                  title: 'GAGAL MEMBUAT MATERI',
+                                  message: examProv.errorMessage ?? 'Gagal membuat materi',
+                                );
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   void _showAssignQuestionsDialog(String examId) {
     final examProv = context.read<ExamProvider>();
+    ExamModel? targetExam;
+    try {
+      targetExam = examProv.exams.firstWhere((e) => e.id == examId);
+    } catch (_) {}
+
     showDialog(
       context: context,
       builder: (_) => AssignQuestionsDialog(
         examId: examId,
+        examTitle: targetExam?.title,
+        courseId: targetExam?.courseId,
+        courseName: targetExam?.courseName,
+        courseCode: targetExam?.courseCode,
         availableQuestions: examProv.questions,
         onSubmit: (id, qids) async {
           final success = await examProv.assignQuestions(id, qids);
@@ -589,6 +977,216 @@ class _ExamsScreenState extends State<ExamsScreen> {
         },
       ),
     );
+  }
+
+  Future<void> _confirmDeleteQuestion(QuestionModel q) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: NeoColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: NeoColors.ink, width: 3),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: NeoColors.danger, size: 24),
+            SizedBox(width: 8),
+            Text(
+              'HAPUS SOAL',
+              style: TextStyle(
+                fontFamily: 'Space Grotesk',
+                fontWeight: FontWeight.w800,
+                fontSize: 16,
+                color: NeoColors.ink,
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Apakah Anda yakin ingin menghapus butir soal ini dari bank soal?',
+              style: TextStyle(
+                fontFamily: 'Hanken Grotesk',
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: NeoColors.ink,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: NeoColors.bg,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.black12),
+              ),
+              child: Text(
+                q.body,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontFamily: 'Hanken Grotesk',
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                  color: Colors.black87,
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(false),
+            child: const Text(
+              'BATAL',
+              style: TextStyle(
+                fontFamily: 'Space Grotesk',
+                fontWeight: FontWeight.w700,
+                color: NeoColors.ink,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: NeoColors.danger,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              side: const BorderSide(color: NeoColors.ink, width: 2),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () => Navigator.of(dialogCtx).pop(true),
+            child: const Text(
+              'HAPUS',
+              style: TextStyle(
+                fontFamily: 'Space Grotesk',
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final examProv = context.read<ExamProvider>();
+      final success = await examProv.deleteQuestion(q.id);
+      if (mounted) {
+        if (success) {
+          setState(() {
+            _selectedBankQuestionIds.remove(q.id);
+          });
+          NeoSnackbar.showSuccess(
+            context,
+            title: 'SOAL DIHAPUS',
+            message: 'Butir soal berhasil dihapus dari bank soal.',
+          );
+        } else {
+          NeoSnackbar.showError(
+            context,
+            title: 'GAGAL MENGHAPUS',
+            message: examProv.errorMessage ?? 'Gagal menghapus butir soal.',
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _confirmDeleteSelectedQuestions() async {
+    final count = _selectedBankQuestionIds.length;
+    if (count == 0) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: NeoColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: NeoColors.ink, width: 3),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.delete_forever, color: NeoColors.danger, size: 24),
+            SizedBox(width: 8),
+            Text(
+              'HAPUS BANYAK SOAL',
+              style: TextStyle(
+                fontFamily: 'Space Grotesk',
+                fontWeight: FontWeight.w800,
+                fontSize: 16,
+                color: NeoColors.ink,
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'Apakah Anda yakin ingin menghapus $count butir soal terpilih dari bank soal secara permanen?',
+          style: const TextStyle(
+            fontFamily: 'Hanken Grotesk',
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: NeoColors.ink,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(false),
+            child: const Text(
+              'BATAL',
+              style: TextStyle(
+                fontFamily: 'Space Grotesk',
+                fontWeight: FontWeight.w700,
+                color: NeoColors.ink,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: NeoColors.danger,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              side: const BorderSide(color: NeoColors.ink, width: 2),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () => Navigator.of(dialogCtx).pop(true),
+            child: const Text(
+              'HAPUS SEMUA',
+              style: TextStyle(
+                fontFamily: 'Space Grotesk',
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final examProv = context.read<ExamProvider>();
+      final idsToDelete = _selectedBankQuestionIds.toList();
+      final success = await examProv.deleteQuestionsBatch(idsToDelete);
+      if (mounted) {
+        if (success) {
+          setState(() {
+            _selectedBankQuestionIds.clear();
+          });
+          NeoSnackbar.showSuccess(
+            context,
+            title: 'SOAL DIHAPUS',
+            message: '$count butir soal berhasil dihapus dari bank soal.',
+          );
+        } else {
+          NeoSnackbar.showError(
+            context,
+            title: 'GAGAL MENGHAPUS',
+            message: examProv.errorMessage ?? 'Gagal menghapus butir soal terpilih.',
+          );
+        }
+      }
+    }
   }
 
   Future<void> _handleEnroll(String examId) async {
@@ -964,6 +1562,7 @@ class _ExamsScreenState extends State<ExamsScreen> {
                             onMonitor: () => _showExamMonitor(exam.id),
                             onViewLocation: () => _showExamLocation(exam),
                             onReviewEssay: isLecturer ? () => _showEssayReviews(exam.id, exam.title) : null,
+                            onViewResult: () => _viewExamResult(exam.id, exam.myAttemptId),
                           );
                         },
                       ),
@@ -974,15 +1573,67 @@ class _ExamsScreenState extends State<ExamsScreen> {
   }
 
   Widget _buildQuestionBankView(ExamProvider examProv) {
+    // Gather all distinct courses from provider & questions
+    final courses = List<CourseModel>.from(examProv.courses);
+    for (final q in examProv.questions) {
+      if (q.courseId.isNotEmpty && !courses.any((c) => c.id == q.courseId)) {
+        courses.add(CourseModel(
+          id: q.courseId,
+          code: q.courseCode ?? 'MAT',
+          name: q.courseName ?? 'Materi Terkait',
+          lecturerId: '',
+        ));
+      }
+    }
+
     final questions = examProv.questions.where((q) {
+      if (_selectedQuestionCourseId != 'all' && q.courseId != _selectedQuestionCourseId) {
+        return false;
+      }
       if (_selectedQuestionType == 'mcq' && q.type != 'mcq') return false;
       if (_selectedQuestionType == 'essay' && q.type != 'essay') return false;
       final query = _questionSearchController.text.trim().toLowerCase();
       if (query.isNotEmpty) {
-        return q.body.toLowerCase().contains(query);
+        final matchesBody = q.body.toLowerCase().contains(query);
+        final matchesCourse = (q.courseName?.toLowerCase().contains(query) ?? false) ||
+            (q.courseCode?.toLowerCase().contains(query) ?? false);
+        return matchesBody || matchesCourse;
       }
       return true;
     }).toList();
+
+    // Group questions by course
+    final Map<String, List<QuestionModel>> groups = {};
+    for (final q in questions) {
+      final key = q.courseId.isNotEmpty ? q.courseId : 'unknown';
+      groups.putIfAbsent(key, () => []).add(q);
+    }
+
+    final List<_BankListItem> listItems = [];
+    int globalNumber = 0;
+    for (final entry in groups.entries) {
+      final groupQuestions = entry.value;
+      final firstQ = groupQuestions.first;
+      final courseCode = firstQ.courseCode;
+      final courseName = firstQ.courseName;
+      final title = courseName != null
+          ? (courseCode != null ? '[$courseCode] $courseName' : courseName)
+          : (courseCode ?? 'Materi Belum Ditentukan');
+
+      listItems.add(_BankListItem.header(
+        courseTitle: title,
+        courseId: entry.key,
+        groupQuestionIds: groupQuestions.map((q) => q.id).toList(),
+      ));
+
+      for (final q in groupQuestions) {
+        globalNumber++;
+        listItems.add(_BankListItem.question(
+          question: q,
+          questionNumber: globalNumber,
+        ));
+      }
+    }
 
     return Column(
       children: [
@@ -1012,12 +1663,13 @@ class _ExamsScreenState extends State<ExamsScreen> {
                 onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 12),
+              // Type Filters
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
                     NeoChip(
-                      label: 'SEMUA (${examProv.questions.length})',
+                      label: 'SEMUA TIPE (${examProv.questions.length})',
                       isSelected: _selectedQuestionType == 'all',
                       selectedColor: NeoColors.primary,
                       onTap: () => setState(() => _selectedQuestionType = 'all'),
@@ -1039,6 +1691,56 @@ class _ExamsScreenState extends State<ExamsScreen> {
                   ],
                 ),
               ),
+              const SizedBox(height: 10),
+              // Materi / Course Filter Chips
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: NeoColors.ink,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      'MATERI',
+                      style: TextStyle(
+                        fontFamily: 'Space Grotesk',
+                        fontWeight: FontWeight.w800,
+                        fontSize: 10,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          NeoChip(
+                            label: 'SEMUA MATERI (${examProv.questions.length})',
+                            isSelected: _selectedQuestionCourseId == 'all',
+                            selectedColor: NeoColors.tertiary,
+                            onTap: () => setState(() => _selectedQuestionCourseId = 'all'),
+                          ),
+                          ...courses.map((c) {
+                            final count = examProv.questions.where((q) => q.courseId == c.id).length;
+                            return Padding(
+                              padding: const EdgeInsets.only(left: 6),
+                              child: NeoChip(
+                                label: '${c.code} • ${c.name} ($count)',
+                                isSelected: _selectedQuestionCourseId == c.id,
+                                selectedColor: NeoColors.primary,
+                                onTap: () => setState(() => _selectedQuestionCourseId = c.id),
+                              ),
+                            );
+                          }),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -1052,26 +1754,58 @@ class _ExamsScreenState extends State<ExamsScreen> {
           ),
           child: Row(
             children: [
-              Text(
-                '${questions.length} Butir Soal Ditampilkan',
-                style: const TextStyle(
-                  fontFamily: 'Space Grotesk',
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12,
-                  color: NeoColors.ink,
+              Expanded(
+                child: Text(
+                  '${questions.length} Butir Soal (${groups.length} Materi)',
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: 'Space Grotesk',
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                    color: NeoColors.ink,
+                  ),
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: _showCreateCourseDialog,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: NeoColors.primary,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: NeoColors.ink, width: 1.5),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.category_outlined, size: 12, color: NeoColors.ink),
+                      SizedBox(width: 3),
+                      Text(
+                        '+ MATERI',
+                        style: TextStyle(
+                          fontFamily: 'Space Grotesk',
+                          fontWeight: FontWeight.w800,
+                          fontSize: 10,
+                          color: NeoColors.ink,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
               GestureDetector(
                 onTap: _showExtractQuestionsDialog,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                   decoration: BoxDecoration(
                     color: NeoColors.tertiary,
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(color: NeoColors.ink, width: 1.5),
                   ),
                   child: const Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.auto_awesome, size: 12, color: NeoColors.ink),
                       SizedBox(width: 4),
@@ -1092,13 +1826,14 @@ class _ExamsScreenState extends State<ExamsScreen> {
               GestureDetector(
                 onTap: _showCreateQuestionDialog,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                   decoration: BoxDecoration(
                     color: NeoColors.secondary,
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(color: NeoColors.ink, width: 1.5),
                   ),
                   child: const Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.add, size: 13, color: NeoColors.ink),
                       SizedBox(width: 3),
@@ -1135,44 +1870,165 @@ class _ExamsScreenState extends State<ExamsScreen> {
                           const SizedBox(height: 40),
                           const NeoEmptyState(
                             title: 'BELUM ADA SOAL',
-                            message: 'Bank soal masih kosong atau tidak cocok dengan filter. Unggah dokumen ujian dengan Gemini AI atau buat butir soal manual.',
+                            message: 'Bank soal masih kosong atau tidak cocok dengan filter materi. Unggah dokumen ujian dengan Gemini AI atau buat butir soal manual.',
                           ),
                           const SizedBox(height: 16),
                           Center(
-                            child: ElevatedButton.icon(
-                              onPressed: _showExtractQuestionsDialog,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: NeoColors.tertiary,
-                                foregroundColor: NeoColors.ink,
-                                side: const BorderSide(color: NeoColors.ink, width: 2),
-                                elevation: 0,
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                              ),
-                              icon: const Icon(Icons.auto_awesome, size: 18),
-                              label: const Text(
-                                'UNGGAH NASKAH SOAL (AI)',
-                                style: TextStyle(
-                                  fontFamily: 'Space Grotesk',
-                                  fontWeight: FontWeight.w800,
+                            child: Wrap(
+                              alignment: WrapAlignment.center,
+                              spacing: 10,
+                              runSpacing: 10,
+                              children: [
+                                ElevatedButton.icon(
+                                  onPressed: _showCreateCourseDialog,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: NeoColors.primary,
+                                    foregroundColor: NeoColors.ink,
+                                    side: const BorderSide(color: NeoColors.ink, width: 2),
+                                    elevation: 0,
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                  ),
+                                  icon: const Icon(Icons.category_outlined, size: 18),
+                                  label: const Text(
+                                    'BUAT MATERI BARU',
+                                    style: TextStyle(
+                                      fontFamily: 'Space Grotesk',
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
                                 ),
-                              ),
+                                ElevatedButton.icon(
+                                  onPressed: _showExtractQuestionsDialog,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: NeoColors.tertiary,
+                                    foregroundColor: NeoColors.ink,
+                                    side: const BorderSide(color: NeoColors.ink, width: 2),
+                                    elevation: 0,
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                  ),
+                                  icon: const Icon(Icons.auto_awesome, size: 18),
+                                  label: const Text(
+                                    'UNGGAH NASKAH SOAL (AI)',
+                                    style: TextStyle(
+                                      fontFamily: 'Space Grotesk',
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       )
                     : ListView.separated(
                         padding: const EdgeInsets.all(16),
-                        itemCount: questions.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 14),
+                        itemCount: listItems.length,
+                        separatorBuilder: (_, index) {
+                          if (index < listItems.length - 1 && listItems[index + 1].isHeader) {
+                            return const SizedBox(height: 18);
+                          }
+                          return const SizedBox(height: 12);
+                        },
                         itemBuilder: (context, index) {
-                          return _buildQuestionCard(questions[index], index + 1);
+                          final item = listItems[index];
+                          if (item.isHeader) {
+                            final allGroupSelected = item.groupQuestionIds != null &&
+                                item.groupQuestionIds!.isNotEmpty &&
+                                item.groupQuestionIds!.every((id) => _selectedBankQuestionIds.contains(id));
+
+                            return Container(
+                              margin: const EdgeInsets.only(top: 4, bottom: 2),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: NeoColors.tertiary,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: NeoColors.ink, width: 2.5),
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: NeoColors.ink,
+                                    offset: Offset(3, 3),
+                                    blurRadius: 0,
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.school_rounded, size: 20, color: NeoColors.ink),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      item.courseTitle ?? 'MATERI',
+                                      style: const TextStyle(
+                                        fontFamily: 'Space Grotesk',
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 13,
+                                        color: NeoColors.ink,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: NeoColors.surface,
+                                      borderRadius: BorderRadius.circular(5),
+                                      border: Border.all(color: NeoColors.ink, width: 1.5),
+                                    ),
+                                    child: Text(
+                                      '${item.groupQuestionIds?.length ?? 0} Soal',
+                                      style: const TextStyle(
+                                        fontFamily: 'Space Mono',
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: NeoColors.ink,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  GestureDetector(
+                                    onTap: () {
+                                      if (item.groupQuestionIds == null) return;
+                                      setState(() {
+                                        if (allGroupSelected) {
+                                          _selectedBankQuestionIds.removeAll(item.groupQuestionIds!);
+                                        } else {
+                                          _selectedBankQuestionIds.addAll(item.groupQuestionIds!);
+                                        }
+                                      });
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: allGroupSelected
+                                            ? NeoColors.danger.withValues(alpha: 0.2)
+                                            : NeoColors.surface,
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: NeoColors.ink, width: 1.5),
+                                      ),
+                                      child: Text(
+                                        allGroupSelected ? 'BATAL' : 'PILIH SEMUA',
+                                        style: TextStyle(
+                                          fontFamily: 'Space Grotesk',
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 10,
+                                          color: allGroupSelected ? NeoColors.danger : NeoColors.ink,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+                          return _buildQuestionCard(item.question!, item.questionNumber!);
                         },
                       ),
           ),
         ),
         if (_selectedBankQuestionIds.isNotEmpty)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: const BoxDecoration(
               color: NeoColors.surface,
               border: Border(top: BorderSide(color: NeoColors.ink, width: 3)),
@@ -1186,79 +2042,129 @@ class _ExamsScreenState extends State<ExamsScreen> {
             ),
             child: SafeArea(
               top: false,
-              child: Row(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: NeoColors.tertiary,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: NeoColors.ink, width: 2),
-                    ),
-                    child: Text(
-                      '${_selectedBankQuestionIds.length} Dipilih',
-                      style: const TextStyle(
-                        fontFamily: 'Space Grotesk',
-                        fontWeight: FontWeight.w800,
-                        fontSize: 12,
-                        color: NeoColors.ink,
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: NeoColors.tertiary,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: NeoColors.ink, width: 1.5),
+                        ),
+                        child: Text(
+                          '${_selectedBankQuestionIds.length} Soal Dipilih',
+                          style: const TextStyle(
+                            fontFamily: 'Space Grotesk',
+                            fontWeight: FontWeight.w800,
+                            fontSize: 11,
+                            color: NeoColors.ink,
+                          ),
+                        ),
                       ),
-                    ),
+                      const Spacer(),
+                      GestureDetector(
+                        onTap: _confirmDeleteSelectedQuestions,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: NeoColors.danger.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: NeoColors.danger, width: 1.5),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.delete_forever, size: 13, color: NeoColors.danger),
+                              SizedBox(width: 3),
+                              Text(
+                                'Hapus Terpilih',
+                                style: TextStyle(
+                                  fontFamily: 'Space Grotesk',
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 11,
+                                  color: NeoColors.danger,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: () => setState(() => _selectedBankQuestionIds.clear()),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.close, size: 13, color: NeoColors.ink),
+                            SizedBox(width: 2),
+                            Text(
+                              'Batal',
+                              style: TextStyle(
+                                fontFamily: 'Space Grotesk',
+                                fontWeight: FontWeight.w700,
+                                fontSize: 11,
+                                color: NeoColors.ink,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: () => setState(() => _selectedBankQuestionIds.clear()),
-                    child: const Text(
-                      'Batal',
-                      style: TextStyle(
-                        fontFamily: 'Space Grotesk',
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
-                        color: NeoColors.danger,
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: NeoColors.secondary,
+                            foregroundColor: NeoColors.ink,
+                            elevation: 0,
+                            side: const BorderSide(color: NeoColors.ink, width: 2),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                          ),
+                          icon: const Icon(Icons.add_box_outlined, size: 14, color: NeoColors.ink),
+                          label: const Text(
+                            'BUAT UJIAN',
+                            style: TextStyle(
+                              fontFamily: 'Space Grotesk',
+                              fontWeight: FontWeight.w800,
+                              fontSize: 11,
+                            ),
+                          ),
+                          onPressed: () => _showCreateExamDialog(
+                            initialSelectedQuestionIds: _selectedBankQuestionIds.toList(),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                  const Spacer(),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: NeoColors.secondary,
-                      foregroundColor: NeoColors.ink,
-                      elevation: 0,
-                      side: const BorderSide(color: NeoColors.ink, width: 2),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    ),
-                    onPressed: () => _showCreateExamDialog(
-                      initialSelectedQuestionIds: _selectedBankQuestionIds.toList(),
-                    ),
-                    child: const Text(
-                      'BUAT UJIAN BARU',
-                      style: TextStyle(
-                        fontFamily: 'Space Grotesk',
-                        fontWeight: FontWeight.w800,
-                        fontSize: 11,
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: NeoColors.primary,
+                            foregroundColor: NeoColors.ink,
+                            elevation: 0,
+                            side: const BorderSide(color: NeoColors.ink, width: 2),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                          ),
+                          icon: const Icon(Icons.playlist_add, size: 16, color: NeoColors.ink),
+                          label: const Text(
+                            'MASUKKAN KE UJIAN',
+                            style: TextStyle(
+                              fontFamily: 'Space Grotesk',
+                              fontWeight: FontWeight.w800,
+                              fontSize: 11,
+                            ),
+                          ),
+                          onPressed: () => _showSelectExamDialog(_selectedBankQuestionIds.toList()),
+                        ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: NeoColors.primary,
-                      foregroundColor: NeoColors.ink,
-                      elevation: 0,
-                      side: const BorderSide(color: NeoColors.ink, width: 2),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    ),
-                    onPressed: () => _showSelectExamDialog(_selectedBankQuestionIds.toList()),
-                    child: const Text(
-                      'MASUKKAN KE UJIAN',
-                      style: TextStyle(
-                        fontFamily: 'Space Grotesk',
-                        fontWeight: FontWeight.w800,
-                        fontSize: 11,
-                      ),
-                    ),
+                    ],
                   ),
                 ],
               ),
@@ -1292,98 +2198,160 @@ class _ExamsScreenState extends State<ExamsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              SizedBox(
-                width: 28,
-                height: 28,
-                child: Checkbox(
-                  value: isSelected,
-                  activeColor: NeoColors.primary,
-                  checkColor: NeoColors.ink,
-                  onChanged: (val) {
-                    setState(() {
-                      if (val == true) {
-                        _selectedBankQuestionIds.add(q.id);
-                      } else {
-                        _selectedBankQuestionIds.remove(q.id);
-                      }
-                    });
-                  },
-                ),
-              ),
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: NeoColors.ink,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  '#$number',
-                  style: const TextStyle(
-                    fontFamily: 'Space Mono',
-                    fontWeight: FontWeight.w700,
-                    fontSize: 11,
-                    color: Colors.white,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: Checkbox(
+                    value: isSelected,
+                    activeColor: NeoColors.primary,
+                    checkColor: NeoColors.ink,
+                    onChanged: (val) {
+                      setState(() {
+                        if (val == true) {
+                          _selectedBankQuestionIds.add(q.id);
+                        } else {
+                          _selectedBankQuestionIds.remove(q.id);
+                        }
+                      });
+                    },
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              NeoTag(
-                label: isMcq ? 'PILIHAN GANDA' : 'ESSAY',
-                customColor: isMcq ? NeoColors.info : NeoColors.secondary,
-                textColor: NeoColors.ink,
-              ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: NeoColors.bg,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: NeoColors.ink, width: 1.5),
-                ),
-                child: Text(
-                  '${q.maxScore.toStringAsFixed(0)} Poin',
-                  style: const TextStyle(
-                    fontFamily: 'Space Mono',
-                    fontWeight: FontWeight.w700,
-                    fontSize: 11,
-                    color: NeoColors.ink,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-              GestureDetector(
-                onTap: () => _showSelectExamDialog([q.id]),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: NeoColors.tertiary,
-                    borderRadius: BorderRadius.circular(6),
+                    color: NeoColors.ink,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    '#$number',
+                    style: const TextStyle(
+                      fontFamily: 'Space Mono',
+                      fontWeight: FontWeight.w700,
+                      fontSize: 11,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                NeoTag(
+                  label: isMcq ? 'PG' : 'ESSAY',
+                  customColor: isMcq ? NeoColors.info : NeoColors.secondary,
+                  textColor: NeoColors.ink,
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: NeoColors.bg,
+                    borderRadius: BorderRadius.circular(4),
                     border: Border.all(color: NeoColors.ink, width: 1.5),
                   ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.add, size: 12, color: NeoColors.ink),
-                      SizedBox(width: 2),
-                      Text(
-                        'KE UJIAN',
-                        style: TextStyle(
-                          fontFamily: 'Space Grotesk',
-                          fontWeight: FontWeight.w800,
-                          fontSize: 10,
-                          color: NeoColors.ink,
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    '${q.maxScore.toStringAsFixed(0)} Poin',
+                    style: const TextStyle(
+                      fontFamily: 'Space Mono',
+                      fontWeight: FontWeight.w700,
+                      fontSize: 11,
+                      color: NeoColors.ink,
+                    ),
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () => _showSelectExamDialog([q.id]),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: NeoColors.tertiary,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: NeoColors.ink, width: 1.5),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.add, size: 12, color: NeoColors.ink),
+                        SizedBox(width: 2),
+                        Text(
+                          'KE UJIAN',
+                          style: TextStyle(
+                            fontFamily: 'Space Grotesk',
+                            fontWeight: FontWeight.w800,
+                            fontSize: 10,
+                            color: NeoColors.ink,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () => _confirmDeleteQuestion(q),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: NeoColors.danger.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: NeoColors.danger, width: 1.5),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.delete_outline, size: 12, color: NeoColors.danger),
+                        SizedBox(width: 2),
+                        Text(
+                          'HAPUS',
+                          style: TextStyle(
+                            fontFamily: 'Space Grotesk',
+                            fontWeight: FontWeight.w800,
+                            fontSize: 10,
+                            color: NeoColors.danger,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 10),
+          if (q.courseName != null || q.courseCode != null) ...[
+            Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: NeoColors.tertiary.withValues(alpha: 0.35),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: NeoColors.ink, width: 1.5),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.school, size: 12, color: NeoColors.ink),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      '${q.courseCode != null ? "[${q.courseCode}] " : ""}${q.courseName ?? ""}',
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontFamily: 'Space Grotesk',
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11,
+                        color: NeoColors.ink,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           Text(
             q.body,
             style: const TextStyle(

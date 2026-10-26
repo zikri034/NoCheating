@@ -218,7 +218,18 @@ class ExamRunnerProvider extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       _isLoading = false;
-      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      final msg = e.toString().replaceAll('Exception: ', '');
+      if (msg.contains('sudah diselesaikan') || msg.contains('ALREADY_FINISHED')) {
+        try {
+          final fullResult = await _repository.fetchExamResultByExamId(examId);
+          _submissionResult = fullResult;
+          _isSubmitted = true;
+          _errorMessage = null;
+          notifyListeners();
+          return;
+        } catch (_) {}
+      }
+      _errorMessage = msg;
       notifyListeners();
     }
   }
@@ -369,7 +380,12 @@ class ExamRunnerProvider extends ChangeNotifier {
 
       // 2. Submit to server
       final res = await _repository.submitAttempt(_attempt!.id);
-      _submissionResult = res;
+      try {
+        final fullResult = await _repository.fetchAttemptResult(_attempt!.id);
+        _submissionResult = fullResult;
+      } catch (_) {
+        _submissionResult = res;
+      }
       _isSubmitted = true;
       _isSubmitting = false;
 

@@ -196,7 +196,19 @@ describe('Sprint 7 — Blockchain, FX, Pair Rush & Feedback Tests', () => {
 
     it('POST /api/game/scores blocks score submission if user is taking an exam (PRD F11)', async () => {
       // Create a temporary in_progress attempt with valid seed
-      const exam = await db('exams').first();
+      let exam = await db('exams').first();
+      if (!exam) {
+        const [createdExam] = await db('exams').insert({
+          course_id: courseId,
+          title: 'Temporary Exam for Pair Rush Test',
+          description: 'Test Exam',
+          start_at: new Date(),
+          end_at: new Date(Date.now() + 3600000),
+          duration_minutes: 60,
+          created_by: lecturerId,
+        }).returning('*');
+        exam = createdExam;
+      }
       const [attempt] = await db('exam_attempts')
         .insert({
           exam_id: exam.id,

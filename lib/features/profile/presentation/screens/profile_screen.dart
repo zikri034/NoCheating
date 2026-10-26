@@ -698,7 +698,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                     value: _notificationsEnabled,
-                    onChanged: (val) => setState(() => _notificationsEnabled = val),
+                    onChanged: (val) async {
+                      setState(() => _notificationsEnabled = val);
+                      if (val) {
+                        await NotificationService.instance.requestNotificationPermission();
+                        await NotificationService.instance.requestExactAlarmsPermission();
+                      } else {
+                        await NotificationService.instance.cancelAllReminders();
+                      }
+                    },
                   ),
                   if (_notificationsEnabled) ...[
                     Padding(
@@ -724,12 +732,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 ),
                               ),
                               onPressed: () async {
+                                final notifAllowed = await NotificationService.instance.areNotificationsEnabled();
+                                if (!notifAllowed) {
+                                  await NotificationService.instance.requestNotificationPermission();
+                                }
                                 await NotificationService.instance.showTestNotification();
                                 if (context.mounted) {
                                   NeoSnackbar.showSuccess(
                                     context,
                                     title: 'NOTIFIKASI TERKIRIM',
-                                    message: 'Periksa status bar perangkat untuk melihat notifikasi uji.',
+                                    message: 'Periksa status bar atau notifikasi perangkat untuk melihat notifikasi uji.',
                                   );
                                 }
                               },
@@ -755,13 +767,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 ),
                               ),
                               onPressed: () async {
-                                await NotificationService.instance.scheduleQuickTestNotification(delaySeconds: 5);
+                                final notifAllowed = await NotificationService.instance.areNotificationsEnabled();
+                                if (!notifAllowed) {
+                                  final granted = await NotificationService.instance.requestNotificationPermission();
+                                  if (!granted && context.mounted) {
+                                    NeoSnackbar.showWarning(
+                                      context,
+                                      title: 'IZIN NOTIFIKASI DIBUTUHKAN',
+                                      message: 'Aktifkan izin notifikasi di pengaturan HP untuk menampilkan alarm SafeExam.',
+                                    );
+                                    return;
+                                  }
+                                }
+
+                                final canExact = await NotificationService.instance.canScheduleExactNotifications();
+                                if (!canExact) {
+                                  if (context.mounted) {
+                                    NeoSnackbar.showWarning(
+                                      context,
+                                      title: 'IZIN ALARM TEPAT DIBUTUHKAN',
+                                      message: 'Izinkan "Alarm & Pengingat" pada pengaturan HP agar alarm berdering tepat waktu.',
+                                    );
+                                  }
+                                  await NotificationService.instance.requestExactAlarmsPermission();
+                                  return;
+                                }
+
+                                final success = await NotificationService.instance.scheduleQuickTestNotification(delaySeconds: 5);
                                 if (context.mounted) {
-                                  NeoSnackbar.showInfo(
-                                    context,
-                                    title: 'PENGINGAT DIJADWALKAN',
-                                    message: 'Alarm notifikasi akan berdering dalam 5 detik.',
-                                  );
+                                  if (success) {
+                                    NeoSnackbar.showInfo(
+                                      context,
+                                      title: 'PENGINGAT DIJADWALKAN',
+                                      message: 'Alarm notifikasi akan berdering dalam 5 detik.',
+                                    );
+                                  } else {
+                                    NeoSnackbar.showError(
+                                      context,
+                                      title: 'GAGAL MENJADWALKAN',
+                                      message: 'Periksa izin alarm tepat (Exact Alarm) pada pengaturan perangkat Anda.',
+                                    );
+                                  }
                                 }
                               },
                             ),

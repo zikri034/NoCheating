@@ -261,4 +261,15 @@ describe('Exam Attempt API Integration Tests (F04)', () => {
     expect(res.body.answers.length).toBe(1);
     expect(res.body.answers[0].selected_option).toBe('Flutter');
   });
+
+  it('GET /api/exams/:id/my-result returns attempt score and exam meta for student', async () => {
+    const res = await request(app)
+      .get(`/api/exams/${examId}/my-result`)
+      .set('Authorization', `Bearer ${studentToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.attempt.total_score).toBe('100.00');
+    expect(res.body.exam.title).toBeDefined();
+    expect(res.body.answers.length).toBe(1);
+  });
 });

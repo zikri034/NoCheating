@@ -181,4 +181,57 @@ describe('Question Document Extraction and Batch Create Tests', () => {
     expect(res.body.questions[1].type).toBe('essay');
     expect(res.body.questions[1].options).toBeNull();
   });
+
+  it('DELETE /api/questions/:id should delete a question from bank soal', async () => {
+    // Create a temporary question
+    const [inserted] = await db('questions').insert({
+      course_id: courseId,
+      type: 'mcq',
+      body: 'Soal untuk pengujian hapus',
+      options: JSON.stringify(['A', 'B', 'C', 'D']),
+      correct_option: 'A',
+      max_score: 10,
+    }).returning('*');
+
+    const delRes = await request(app)
+      .delete(`/api/questions/${inserted.id}`)
+      .set('Authorization', `Bearer ${lecturerToken}`);
+
+    expect(delRes.status).toBe(200);
+    expect(delRes.body.success).toBe(true);
+
+    const check = await db('questions').where({ id: inserted.id }).first();
+    expect(check).toBeUndefined();
+  });
+
+  it('POST /api/questions/batch-delete should delete multiple questions from bank soal', async () => {
+    const inserted = await db('questions').insert([
+      {
+        course_id: courseId,
+        type: 'essay',
+        body: 'Soal batch hapus 1',
+        max_score: 10,
+      },
+      {
+        course_id: courseId,
+        type: 'essay',
+        body: 'Soal batch hapus 2',
+        max_score: 10,
+      },
+    ]).returning('*');
+
+    const ids = inserted.map((q: any) => q.id);
+
+    const delRes = await request(app)
+      .post('/api/questions/batch-delete')
+      .set('Authorization', `Bearer ${lecturerToken}`)
+      .send({ question_ids: ids });
+
+    expect(delRes.status).toBe(200);
+    expect(delRes.body.success).toBe(true);
+    expect(delRes.body.count).toBe(2);
+
+    const check = await db('questions').whereIn('id', ids);
+    expect(check).toHaveLength(0);
+  });
 });
