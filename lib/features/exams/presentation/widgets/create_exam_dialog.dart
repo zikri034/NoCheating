@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
+import 'package:latlong2/latlong.dart';
+import '../../../../core/services/geofence_service.dart';
 import '../../../../core/theme/neo_theme.dart';
 import '../../../../core/widgets/neo_button.dart';
+import '../../../../core/widgets/neo_snackbar.dart';
 import '../../../../core/widgets/neo_text_field.dart';
 import '../../data/models/course_model.dart';
+import 'exam_location_picker_dialog.dart';
 
 class CreateExamDialog extends StatefulWidget {
   final List<CourseModel> courses;
@@ -31,6 +37,9 @@ class _CreateExamDialogState extends State<CreateExamDialog> {
   final _lngController = TextEditingController(text: '106.827153');
   final _radiusController = TextEditingController(text: '150');
 
+  String _locationName = 'Monas (Jakarta Pusat)';
+  bool _showManualCoords = false;
+
   late List<String> _selectedQuestionIds;
 
   String? _selectedCourseId;
@@ -41,6 +50,71 @@ class _CreateExamDialogState extends State<CreateExamDialog> {
   bool _isPublished = true;
   bool _isSubmitting = false;
   String? _errorMessage;
+
+  Future<void> _openLocationPicker() async {
+    final currentLat = double.tryParse(_latController.text) ?? -6.175392;
+    final currentLng = double.tryParse(_lngController.text) ?? 106.827153;
+    final currentRadius = int.tryParse(_radiusController.text) ?? 150;
+
+    final result = await showDialog<ExamLocationPickerResult>(
+      context: context,
+      builder: (ctx) => ExamLocationPickerDialog(
+        initialLat: currentLat,
+        initialLng: currentLng,
+        initialRadius: currentRadius,
+        initialLocationName: _locationName,
+      ),
+    );
+
+    if (result != null && mounted) {
+      setState(() {
+        _latController.text = result.latitude.toStringAsFixed(6);
+        _lngController.text = result.longitude.toStringAsFixed(6);
+        _radiusController.text = result.radiusMeters.toString();
+        _locationName = result.locationName;
+      });
+    }
+  }
+
+  Future<void> _useCurrentGps() async {
+    final geo = GeofenceService();
+    final hasPerm = await geo.checkAndRequestPermission();
+    if (!hasPerm) {
+      if (mounted) {
+        NeoSnackbar.showError(
+          context,
+          title: 'IZIN LOKASI DITOLAK',
+          message: 'Aktifkan GPS dan izinkan akses lokasi untuk membaca posisi saat ini.',
+        );
+      }
+      return;
+    }
+
+    try {
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+      );
+      if (!mounted) return;
+      setState(() {
+        _latController.text = pos.latitude.toStringAsFixed(6);
+        _lngController.text = pos.longitude.toStringAsFixed(6);
+        _locationName = 'Posisi GPS Saya Saat Ini';
+      });
+      NeoSnackbar.showSuccess(
+        context,
+        title: 'POSISI TERCATAT',
+        message: 'Koordinat diperbarui ke lokasi GPS Anda saat ini.',
+      );
+    } catch (_) {
+      if (mounted) {
+        NeoSnackbar.showError(
+          context,
+          title: 'GAGAL MEMBACA GPS',
+          message: 'Gagal mengambil koordinat posisi perangkat.',
+        );
+      }
+    }
+  }
 
   @override
   void initState() {
@@ -505,31 +579,277 @@ class _CreateExamDialogState extends State<CreateExamDialog> {
                         onChanged: (val) => setState(() => _requireGeofence = val),
                       ),
                       if (_requireGeofence) ...[
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: NeoTextField(
-                                label: 'Latitude',
-                                controller: _latController,
-                                keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                        const SizedBox(height: 10),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: NeoColors.surface,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: NeoColors.ink, width: 2.5),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: NeoColors.ink,
+                                offset: Offset(3, 3),
+                                blurRadius: 0,
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: NeoTextField(
-                                label: 'Longitude',
-                                controller: _lngController,
-                                keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                            ],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Title & Radius chip
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: BoxDecoration(
+                                      color: NeoColors.primary,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: NeoColors.ink, width: 2),
+                                    ),
+                                    child: const Icon(Icons.location_on, size: 20, color: Colors.white),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          _locationName.isEmpty ? 'Lokasi Ujian' : _locationName,
+                                          style: const TextStyle(
+                                            fontFamily: 'Space Grotesk',
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w800,
+                                            color: NeoColors.ink,
+                                          ),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'Lat: ${_latController.text} | Lng: ${_lngController.text}',
+                                          style: TextStyle(
+                                            fontFamily: 'Hanken Grotesk',
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            color: NeoColors.ink.withValues(alpha: 0.7),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: NeoColors.secondary,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: NeoColors.ink, width: 1.5),
+                                    ),
+                                    child: Text(
+                                      '${_radiusController.text} M',
+                                      style: const TextStyle(
+                                        fontFamily: 'Space Grotesk',
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w900,
+                                        color: NeoColors.ink,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        NeoTextField(
-                          label: 'Radius Geofence (Meter)',
-                          controller: _radiusController,
-                          keyboardType: TextInputType.number,
+                              const SizedBox(height: 12),
+
+                              // Interactive Mini-Map Preview
+                              Builder(
+                                builder: (context) {
+                                  final lat = double.tryParse(_latController.text) ?? -6.175392;
+                                  final lng = double.tryParse(_lngController.text) ?? 106.827153;
+                                  final radius = double.tryParse(_radiusController.text) ?? 150.0;
+                                  final center = LatLng(lat, lng);
+
+                                  return ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Stack(
+                                      children: [
+                                        Container(
+                                          height: 140,
+                                          decoration: BoxDecoration(
+                                            border: Border.all(color: NeoColors.ink, width: 2),
+                                          ),
+                                          child: FlutterMap(
+                                            options: MapOptions(
+                                              initialCenter: center,
+                                              initialZoom: 15.5,
+                                              interactionOptions: const InteractionOptions(
+                                                flags: InteractiveFlag.none,
+                                              ),
+                                              onTap: (tapPosition, point) => _openLocationPicker(),
+                                            ),
+                                            children: [
+                                              TileLayer(
+                                                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                                userAgentPackageName: 'com.example.thereisnocheating',
+                                              ),
+                                              CircleLayer(
+                                                circles: [
+                                                  CircleMarker(
+                                                    point: center,
+                                                    radius: radius,
+                                                    useRadiusInMeter: true,
+                                                    color: NeoColors.primary.withValues(alpha: 0.25),
+                                                    borderColor: NeoColors.primary,
+                                                    borderStrokeWidth: 2,
+                                                  ),
+                                                ],
+                                              ),
+                                              MarkerLayer(
+                                                markers: [
+                                                  Marker(
+                                                    point: center,
+                                                    width: 32,
+                                                    height: 32,
+                                                    child: const Icon(
+                                                      Icons.location_on,
+                                                      color: NeoColors.danger,
+                                                      size: 32,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        Positioned.fill(
+                                          child: Material(
+                                            color: Colors.transparent,
+                                            child: InkWell(
+                                              onTap: _openLocationPicker,
+                                              child: Container(
+                                                alignment: Alignment.bottomRight,
+                                                padding: const EdgeInsets.all(8),
+                                                child: Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                  decoration: BoxDecoration(
+                                                    color: NeoColors.ink.withValues(alpha: 0.8),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                  ),
+                                                  child: const Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      Icon(Icons.touch_app, size: 12, color: Colors.white),
+                                                      SizedBox(width: 4),
+                                                      Text(
+                                                        'Sentuh untuk ubah peta',
+                                                        style: TextStyle(
+                                                          fontSize: 10,
+                                                          fontWeight: FontWeight.w700,
+                                                          color: Colors.white,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+                              const SizedBox(height: 10),
+
+                              // Map Actions Buttons
+                              Row(
+                                children: [
+                                  Expanded(
+                                    flex: 3,
+                                    child: NeoButton(
+                                      text: 'PILIH TITIK DI PETA',
+                                      icon: const Icon(Icons.map, size: 16),
+                                      backgroundColor: NeoColors.primary,
+                                      fontSize: 12,
+                                      onPressed: _openLocationPicker,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    flex: 2,
+                                    child: NeoButton(
+                                      text: 'GPS SAYA',
+                                      icon: const Icon(Icons.my_location, size: 16),
+                                      backgroundColor: NeoColors.secondary,
+                                      fontSize: 12,
+                                      onPressed: _useCurrentGps,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+
+                              // Accordion toggle for manual coordinates
+                              InkWell(
+                                onTap: () => setState(() => _showManualCoords = !_showManualCoords),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 4),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        _showManualCoords ? 'Sembunyikan Koordinat Manual' : 'Ubah Koordinat & Radius Manual',
+                                        style: const TextStyle(
+                                          fontFamily: 'Hanken Grotesk',
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: NeoColors.ink,
+                                          decoration: TextDecoration.underline,
+                                        ),
+                                      ),
+                                      Icon(
+                                        _showManualCoords ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                                        size: 16,
+                                        color: NeoColors.ink,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              if (_showManualCoords) ...[
+                                const SizedBox(height: 6),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: NeoTextField(
+                                        label: 'Latitude',
+                                        controller: _latController,
+                                        keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                                        onChanged: (_) => setState(() {}),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: NeoTextField(
+                                        label: 'Longitude',
+                                        controller: _lngController,
+                                        keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                                        onChanged: (_) => setState(() {}),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                NeoTextField(
+                                  label: 'Radius Geofence (Meter)',
+                                  controller: _radiusController,
+                                  keyboardType: TextInputType.number,
+                                  onChanged: (_) => setState(() {}),
+                                ),
+                              ],
+                            ],
+                          ),
                         ),
                         const SizedBox(height: 8),
                       ],
