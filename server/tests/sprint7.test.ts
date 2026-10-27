@@ -20,13 +20,16 @@ describe('Sprint 7 — Blockchain, FX, Pair Rush & Feedback Tests', () => {
   let lecturerToken: string;
   let studentId: string;
   let lecturerId: string;
+  let courseId: string;
 
   beforeAll(async () => {
     const student = await db('users').where({ email: 'citra.student@safeexam.ac.id' }).first();
     const lecturer = await db('users').where({ role: 'lecturer' }).first();
+    const course = await db('courses').first();
 
     studentId = student.id;
     lecturerId = lecturer.id;
+    courseId = course ? course.id : '';
 
     studentToken = jwt.sign(
       { id: student.id, email: student.email, role: 'student', name: student.name },
@@ -204,7 +207,7 @@ describe('Sprint 7 — Blockchain, FX, Pair Rush & Feedback Tests', () => {
           description: 'Test Exam',
           start_at: new Date(),
           end_at: new Date(Date.now() + 3600000),
-          duration_minutes: 60,
+          duration_min: 60,
           created_by: lecturerId,
         }).returning('*');
         exam = createdExam;
